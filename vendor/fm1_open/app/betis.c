@@ -7,19 +7,19 @@
  * MIDI note identities so adjacent quantized keys release independently. */
 static const int8_t scale[12] = {0, -100, 0, -100, 0, 0, -100, 100, 0, 0, -100, 0};
 
-/* Starting XI, Copa final 23 April 2022, not a current-team prediction. */
+/* Project representative XI, 2025/26 squad; not an official fixed lineup. */
 const struct betis_player betis_eleven[11] = {
-    {"CLAUDIO BRAVO", "PORTERO", "EL MURO"},
-    {"HECTOR BELLERIN", "LATERAL DERECHO", "CENTRO PARA EL PANDA"},
-    {"GERMAN PEZZELLA", "CENTRAL", "CERROJO VERDIBLANCO"},
+    {"ALVARO VALLES", "PORTERO", "EL MURO"},
+    {"HECTOR BELLERIN", "LATERAL DERECHO", "POR LA BANDA"},
+    {"NATAN", "CENTRAL", "CERROJO VERDIBLANCO"},
     {"MARC BARTRA", "CENTRAL", "SALIDA CON ARTE"},
-    {"ALEX MORENO", "LATERAL IZQUIERDO", "POR LA BANDA"},
-    {"GUIDO RODRIGUEZ", "MEDIOCENTRO", "AQUI NO PASA NADIE"},
-    {"WILLIAM CARVALHO", "MEDIOCENTRO", "CALMA Y COMPAS"},
-    {"SERGIO CANALES", "MEDIAPUNTA", "ENTRE LINEAS"},
-    {"NABIL FEKIR", "MEDIAPUNTA", "MAGIA EN LA BOTA"},
-    {"JUANMI", "EXTREMO", "AL DESMARQUE"},
-    {"BORJA IGLESIAS", "DELANTERO", "EL PANDA"}
+    {"RICARDO RODRIGUEZ", "LATERAL IZQUIERDO", "RECORRIDO Y COMPAS"},
+    {"SOFYAN AMRABAT", "MEDIOCENTRO", "AQUI NO PASA NADIE"},
+    {"PABLO FORNALS", "MEDIOCENTRO", "PASE CON ARTE"},
+    {"ISCO", "MEDIAPUNTA", "MAGIA EN LA BOTA"},
+    {"ANTONY", "EXTREMO DERECHO", "DESBORDE VERDIBLANCO"},
+    {"EZ ABDE", "EXTREMO IZQUIERDO", "AL DESMARQUE"},
+    {"CUCHO HERNANDEZ", "DELANTERO", "AL FONDO DE LA RED"}
 };
 const char *const betis_rhythm_names[BETIS_RHYTHMS] = {
     "PALMAS DEL HELIOPOLIS", "BOMBO DE LAS 13 BARRAS",
@@ -45,6 +45,78 @@ int betis_midi_prepare(unsigned enabled)
         groove_arp_set(0, midi_arp);
         midi_prepared = 0;
     }
+    return 0;
+}
+struct betis_song_step { uint16_t duration; uint8_t note; };
+#if __has_include("betis_song_data.h")
+#include "betis_song_data.h"
+#else
+#define BETIS_SONG_COUNT 0U
+static const struct betis_song_step betis_song[1] = {{600, 60}};
+#endif
+static unsigned song_position, song_mode, song_errors, song_sounding = 128;
+static uint32_t song_deadline;
+#ifdef __wasm__
+#define BETIS_EXPORT(name) __attribute__((export_name(name)))
+#else
+#define BETIS_EXPORT(name)
+#endif
+BETIS_EXPORT("betis_song_count") unsigned betis_song_count(void) { return BETIS_SONG_COUNT; }
+BETIS_EXPORT("betis_song_position") unsigned betis_song_position(void) { return song_position; }
+BETIS_EXPORT("betis_song_mode") unsigned betis_song_mode(void) { return song_mode; }
+BETIS_EXPORT("betis_song_errors") unsigned betis_song_errors(void) { return song_errors; }
+BETIS_EXPORT("betis_song_note") unsigned betis_song_note(void)
+{
+    return song_position < BETIS_SONG_COUNT ? betis_song[song_position].note : 128;
+}
+static int song_message(uint8_t status, uint8_t note, uint8_t velocity)
+{
+    const uint8_t message[] = {status, note, velocity};
+    return fm1_midi_post(message, sizeof message);
+}
+int betis_song_stop(void)
+{
+    if (song_sounding < 128 && song_message(0x80, song_sounding, 0)) return -1;
+    song_sounding = 128;
+    song_mode = 0;
+    return betis_midi_prepare(0);
+}
+int betis_song_start(unsigned mode, uint32_t now)
+{
+    if (!BETIS_SONG_COUNT || mode < 1 || mode > 2) return -1;
+    if (betis_song_stop() || betis_midi_prepare(1)) return -1;
+    const uint8_t stop = 0xfc;
+    if (fm1_midi_post(&stop, 1)) { (void)betis_midi_prepare(0); return -1; }
+    song_position = song_errors = 0;
+    song_mode = mode;
+    song_deadline = now;
+    return 0;
+}
+int betis_song_tick(uint32_t now)
+{
+    if (song_mode != 1 || (int32_t)(now - song_deadline) < 0) return 0;
+    if (song_sounding < 128 && song_message(0x80, song_sounding, 0)) return -1;
+    song_sounding = 128;
+    if (song_position >= BETIS_SONG_COUNT) return betis_song_stop();
+    const struct betis_song_step *step = &betis_song[song_position];
+    if (song_message(0x90, step->note, 90)) return -1;
+    song_sounding = step->note;
+    song_deadline += step->duration;
+    ++song_position;
+    return 0;
+}
+void betis_song_press(unsigned note)
+{
+    if (song_mode != 2 || song_position >= BETIS_SONG_COUNT) return;
+    if (note == betis_song[song_position].note) ++song_position;
+    else if (song_errors < 9999) ++song_errors;
+}
+int betis_song_seek(int delta)
+{
+    if (song_mode != 2 || !BETIS_SONG_COUNT) return -1;
+    int next = (int)song_position + delta;
+    song_position = next < 0 ? 0 : (unsigned)next >= BETIS_SONG_COUNT
+        ? BETIS_SONG_COUNT - 1 : (unsigned)next;
     return 0;
 }
 int betis_rhythm_apply(unsigned rhythm)
@@ -102,6 +174,8 @@ int betis_tuning_cents(unsigned track, unsigned pitch)
 int betis_init(void)
 {
     midi_prepared = 0;
+    song_position = song_mode = song_errors = 0;
+    song_sounding = 128;
     if (betis_scale_set(1)) return -1;
     groove_arp_set(0, 1);
     groove_sends_edit(0, 0, 5);

@@ -7,6 +7,7 @@
     "app/betis.c",
     "app/betis.h",
     "app/betis_art.h",
+    "app/betis_pixels.h",
     "app/screen.c",
     "web/engine/Simulator.c"
   ],

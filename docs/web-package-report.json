@@ -1,13 +1,13 @@
 {
-    "firmware_sha256":  "f11e4744f427b55bd137d8fa7134c7350f23b898f918d6d8481482dcf98f2398",
+    "firmware_sha256":  "649c449ed873e897efa3c4e7d0d62da0ce98e1f190b53cd77b6f618b8313ba7c",
     "hardware_validated":  false,
-    "web_sha256":  "52e83730cfd6fbeeaa1eedb88720e3ccb4143b78ea75002e274222b9429400ad",
-    "build_id":  "4c1dfecfbc2a775090704fc28fdc96362d632afdf641a5e02cd30ce8972322ef",
+    "web_sha256":  "888aa022913ffa253124afeebb7336c8bbf6824951938fec97f1bb6ff73ffe59",
+    "build_id":  "79d5f3c0d9c811f57489f79cdb4a5435d85a4cf370d589e15ebd44cb74a75783",
     "board_access":  false,
     "release_version":  "V13",
-    "simulator_sha256":  "7559d32b99700a6c8a66312b09e2c5fa73791aab0a4800aae802ad638add2fba",
-    "simulator_source_sha256":  "0645e1abeae363dbd90c2126deffd8f40a28e3afa6678c967f8657a72de76e9d",
+    "simulator_sha256":  "0a66e6c24844fe08de903f2ae6a4e67863a633c175dfd0826aa17f97ee4e1b1f",
+    "simulator_source_sha256":  "c032bd8e50ac7cd96c08ddb01bb71392ca90a0c7b07b4abffa2424d2571d91bd",
     "integrated":  true,
-    "simulator_bytes":  267432,
-    "upstream_web_sha256":  "4120bf0f1a791a4ff178ac9b89914ee0c7d65616f90b8f0a66edc9afc2309b38"
+    "simulator_bytes":  273919,
+    "upstream_web_sha256":  "fe797250eb7617baf1a28a63d544bc35d9e5da3d57f23a5b3dd226d62e68b264"
 }

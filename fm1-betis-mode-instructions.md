@@ -25,14 +25,28 @@ payload identity and corresponding-source completeness.
 - `app/betis.c`: E Phrygian-dominant cent tuning using the official tuning
   API, track 1 arpeggiator defaults, and synthesized 808 crowd rhythm.
 - `app/betis.h`: shared hardware/web interface and dashboard page ABI.
-- `app/betis_art.h`: project-supplied monochrome artwork rasterized onto TFT.
+- `app/betis_pixels.h`: original 32x40 indexed-color shield, mascot and eleven
+  player portraits, compressed losslessly; `tools/Generate-Betis-Art.py` reproduces
+  both the native artwork and `web/betis-sprites.svg` contact sheet.
 - `app/screen.c`: green theme, boot branding, dashboard and controls, animated
   MIDI activity, and HOME+FX navigation. Uses the original band compositor,
   DMA ownership and existing input/transport handlers.
-- FX cycles studio / La Grada / 2022 Copa XI / club history. La Grada offers
+- FX cycles studio / La Grada / representative 2025/26 XI / club history /
+  Himno-Aprender. La Grada offers
   four original percussion patterns (EDIT explicitly loads track 8), a manual
-  0-99 scoreboard and a four-second goal celebration. The XI is historical,
-  sourced from the 23 April 2022 final, not an assumed current lineup.
+  0-99 scoreboard and a four-second goal celebration. The XI is explicitly a
+  project selection from the 2025/26 squad, not an official fixed match lineup.
+- `tools/Compile-Hymn.py` extracts a monophonic top-line melody from a selected
+  track in user-supplied MIDI, retaining tempo and folding octaves to 27 keys.
+  The ignored generated `app/betis_song_data.h` is embedded only in a private
+  `Build.ps1 -LocalHymn` build, distributed in ignored `local/docs/`.
+  Public builds refuse to run if that header is present. See README for the
+  matching private source archive and public source-URL caveat.
+- Aprender: EDIT starts, the next physical/on-screen key lights, correct new
+  key presses advance one step, errors wait, K1 seeks and REC repeats a group
+  of eight notes. SCL stops; HOME exits and restores tuning/ARP. Input evaluation
+  uses the panel/on-screen keyboard, not external MIDI. PLAY listens to the
+  embedded melody. Projects and samples are not written by the lesson.
 - `web/betis-grada.html`: web-only local authorized-audio players for traditional
   and centenary hymns. No protected music or lyrics are supplied; selected files
   are neither uploaded nor persisted. Native patterns remain original percussion.

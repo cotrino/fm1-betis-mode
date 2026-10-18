@@ -44,8 +44,8 @@ Loading a saved project restores its own tuning, sounds, patterns and arp.
 
 ### Mas grada: guasa, goles y memoria betica
 
-From the Betis studio, **FX** cycles through four shared hardware/browser views:
-studio, **La Grada**, **Once de Copa**, and **Memoria Betica**. HOME+FX returns to
+From the Betis studio, **FX** cycles through five shared hardware/browser views:
+studio, **La Grada**, **Once 25/26**, **Memoria Betica**, and **Himno / Aprender**. HOME+FX returns to
 the studio; HOME still opens the original overview.
 
 - **La Grada:** K1 selects one of four original synthesized percussion patterns:
@@ -58,10 +58,10 @@ the studio; HOME still opens the original overview.
   Betis score triggers a four-second goal message. Corrections are allowed.
   This is a manual toy scoreboard, not a live score service; it resets at boot.
   K4 retains the 60-180 BPM control. Thirteen green/white bars crown the display.
-- **Once de Copa:** K1 browses the eleven starters in the **23 April 2022 Copa
-  final**, not an unverified current lineup. List numbers are not shirt numbers.
-  Bravo; Bellerin, Pezzella, Bartra, Alex Moreno; Guido, William Carvalho;
-  Canales, Fekir, Juanmi; Borja Iglesias. Player descriptions are original
+- **Once 25/26:** K1 browses a representative **2025/26 project selection**,
+  not an official fixed starting XI. List numbers are not shirt numbers.
+  Valles; Bellerin, Natan, Bartra, Ricardo Rodriguez; Amrabat, Fornals;
+  Isco, Antony, Abde; Cucho Hernandez. Player descriptions are original
   fan-written flavor, not quotations or claims of official nicknames.
 - **Memory:** 1907 roots, the 1935 Liga, Cups in 1977/2005/2022, thirteen bars,
   Palmerin, and Manque pierda.
@@ -88,13 +88,55 @@ disables track 1's scale/ARP, and restores both at stop/end. Stop it before
 editing or saving a project. Hiding the tab stops playback to prevent
 background timer drift and stuck notes. Supplied originals and exported
 arrangements remain local under ignored `himnos/`; they are not in Git, the
-public source ZIP, firmware, or deployed web page.
+public source ZIP, public firmware, or deployed web page.
 
 References checked for this implementation:
-[RTVE's 2022 final match sheet](https://www.rtve.es/deportes/20220424/final-copa-rey-betis-gana-valencia-penatis-miranda/2337862.shtml)
-(1-1, Betis wins 5-4 on penalties) and the
+[Betisweb's 2025/26 squad listing](https://www.betisweb.com/web/list/plantilla-betis-25-26/)
+for season membership (the XI itself is our selection), and the
 [club's account of the 1935 championship](https://www.realbetisbalompie.es/noticias/actualidad/historia-el-ano-que-fuimos-campeones-24228).
-No current squad is inferred from speculative search results.
+The season is explicitly 2025/26, as requested, regardless of the current date.
+
+### Integrated hymn and Aprender (private local build)
+
+The supplied centenary MIDI can be compiled into a monophonic FM melody
+that fits the physical 27-key keyboard. At each onset, the highest pitched
+note in the selected melody track is used; out-of-range notes move by octaves,
+preserving pitch class. This is a teaching reduction, **not** the earlier
+eight-voice accompaniment arrangement. The melody, not recorded audio, lives
+inside the native firmware and matching Wasm.
+
+On **Himno / Aprender**, PLAY listens, EDIT starts the step-by-step lesson,
+SCL stops, and HOME exits. The next note's physical key LED lights; a correct
+new key press advances once, errors do not advance, and holding a key does not
+auto-repeat. No rhythmic scoring is claimed. K1 seeks, REC repeats an
+eight-note phrase. Track 1 must be FM; it uses a fixed octave, temporarily
+disables its scale/ARP and restores those settings at stop/exit. Follow input
+is the FM1 panel or on-screen keyboard; external MIDI input is not evaluated.
+Do not load/save projects or change patches during a lesson.
+
+```powershell
+python .\tools\Compile-Hymn.py .\himnos\himno-centenario-del-betis.mid --track 1 --output .\vendor\fm1_open\app\betis_song_data.h
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Build.ps1 -LocalHymn
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Verify.ps1 -LocalHymn
+```
+
+Private outputs are in ignored `local/docs/`, including firmware, a self-contained
+workbench, and the **matching private source ZIP** with the generated melody header.
+The SDK's embedded public source URL does not identify this private build; keep
+its adjacent private archive with it and do not redistribute without permission.
+Public builds refuse to run while the private header is in `app/`; move that
+header outside `app/` before building for public distribution. No official
+copyrighted photos or hymn data are committed.
+
+### Original pixel artwork
+
+The shield, mascot and eleven stylized fan portraits are original 32x40,
+16-color illustrations rendered at 2x on the TFT. They use lossless run-length
+compression to preserve the official flash/VM/user-storage reservation.
+Isco, Antony, Cucho and the other selected players have separate portraits.
+They are interpretive cartoons, not official photos or photorealistic likenesses.
+Regenerate with `python .\tools\Generate-Betis-Art.py`; inspect the contact sheet
+in [web/betis-sprites.svg](web/betis-sprites.svg).
 
 ## Preserved official features
 
