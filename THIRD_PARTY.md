@@ -2,6 +2,22 @@
 
 Project-owned public APP sources: [GPLv3 with the FM1 SDK linking exception](LICENSE.md). Component licenses also apply to firmware and web builds that include those components.
 
+## User-authorized teaching arrangements
+
+The published firmware, web emulator and corresponding-source archive include
+monophonic teaching reductions of the supplied centenary hymn and
+"No puedo vivir sin ti" charanga MIDI. On 2026-10-18 the user explicitly confirmed
+having authorization from the rightsholders to publish both arrangements,
+including their musical data, in these deliverables.
+
+`vendor/fm1_open/app/betis_song_data.h` contains the generated note/timing data;
+`tools/Compile-Hymn.py` documents its extraction and transposition. Original MIDI
+files, recordings and lyrics are not distributed. Underlying compositions retain
+their respective rightsholders' rights; this confirmation does not place them
+in the public domain or imply club endorsement.
+
+## Engine and SDK components
+
 | Component | Source / license |
 | --- | --- |
 | 303 | [Open303](https://github.com/RobinSchmidt/Open303/tree/313bf0d9ade7c1dcb6b3a74f5ea1780a29d70074), MIT; C adaptation with FM1 drive and MIDI handling. |

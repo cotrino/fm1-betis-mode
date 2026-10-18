@@ -11,6 +11,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test melody extraction and interval preservation
+        shell: powershell
+        run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Build with verified official toolchains
         shell: powershell
         run: .\Build.ps1

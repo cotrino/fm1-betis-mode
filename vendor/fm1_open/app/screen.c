@@ -1371,17 +1371,12 @@ static __attribute__((noinline, cold, minsize)) void boot_draw(void)
 static void betis_bitmap(unsigned x, unsigned y, unsigned sprite)
 {
     if (sprite >= 13) return;
-    const uint8_t *data = betis_pixels[sprite];
-    unsigned pixel = 0;
-    while (pixel < 1280) {
-        unsigned run = *data++, length = (run >> 4) + 1, color = run & 15U;
-        while (length && pixel < 1280) {
-            unsigned span = 32 - pixel % 32;
-            if (span > length) span = length;
-            if (color) paint_fill(x + (pixel % 32) * 2, y + (pixel / 32) * 2,
-                span * 2, 2, betis_palette[color]);
-            pixel += span;
-            length -= span;
+    for (unsigned row = 0; row < 40; ++row) {
+        const uint8_t *data = betis_pixel_rows + betis_row_offsets[betis_sprite_rows[sprite * 40 + row]];
+        for (unsigned pixel = 0; pixel < 32;) {
+            unsigned run = *data++, length = (run >> 4) + 1, color = run & 15U;
+            if (color) paint_fill(x + pixel * 2, y + row * 2, length * 2, 2, betis_palette[color]);
+            pixel += length;
         }
     }
 }
@@ -1413,7 +1408,8 @@ static void betis_draw(void)
         betis_rhythm * 668265263U ^ betis_home * 374761393U ^
         betis_away * 1274126177U ^ goal;
     sig ^= betis_song_position() * 1597334677U ^ betis_song_mode() * 3812015801U ^
-        betis_song_errors() * 958282871U;
+        betis_song_errors() * 958282871U ^ betis_song_selected() * 1103515245U;
+    sig ^= betis_penalty_state() * 1664525U;
     if (cache->middle_cache == sig) return;
     cache->middle_cache = sig;
     /* Use the normal damage/band compositor; never write behind its DMA. */
@@ -1423,7 +1419,7 @@ static void betis_draw(void)
         paint_fill(i * 240 / 13, 30, (i + 1) * 240 / 13 - i * 240 / 13, 4,
             i & 1U ? TEXT : ACCENT);
     if (betis_view) {
-        static const char *const titles[] = {"", "LA GRADA", "ONCE 25/26", "MEMORIA BETICA", "HIMNO / APRENDER"};
+        static const char *const titles[] = {"", "LA GRADA", "ONCE 25/26", "MEMORIA BETICA", "HIMNO / APRENDER", "PENALTIS"};
         text(8, 40, titles[betis_view], 2, ACCENT, BACK);
         if (betis_view == 1) {
             text(8, 68, goal ? "GOOOOL DEL BETIS!" : "VIVA EL BETIS!", 2, TEXT, BACK);
@@ -1464,9 +1460,34 @@ static void betis_draw(void)
             for (unsigned i = 0; i < 8; ++i)
                 text(8, 72 + i * 17, history[i], 1, i & 1U ? TEXT : ACCENT, BACK);
             text(8, 213, "EL MARCADOR NO MANDA AQUI", 1, TEXT, BACK);
+        } else if (betis_view == 5) {
+            const struct betis_penalties *p = &betis_penalties;
+            static const char *const directions[] = {"IZQUIERDA", "CENTRO", "DERECHA"};
+            text(8, 68, p->keeper ? "MODO PORTERO / PARA EL BALON" : "MODO TIRADOR / A MARCAR", 1, TEXT, BACK);
+            paint_fill(24, 90, 192, 4, TEXT);
+            paint_fill(24, 94, 4, 64, TEXT);
+            paint_fill(212, 94, 4, 64, TEXT);
+            line(24, 158, 216, 158, ACCENT);
+            for (unsigned i = 1; i < 6; ++i) line(24 + i * 32, 94, 24 + i * 32, 157, DIM);
+            unsigned keeper = p->result ? (p->keeper ? p->aim : p->opponent) : 1;
+            unsigned gx = 56 + keeper * 64;
+            paint_fill(gx - 5, 116, 10, 10, TEXT);
+            paint_fill(gx - 14, 128, 28, 5, ACCENT);
+            paint_fill(gx - 6, 126, 12, 23, ACCENT);
+            unsigned ball = p->keeper ? p->opponent : p->aim;
+            paint_fill(p->result ? 52 + ball * 64 : 116, p->result ? 103 : 166, 8, 8, TEXT);
+            text(8, 180, p->result == 1 ? "GOOOL!" : p->result == 2 ? "PARADON!" : "PLAY PARA JUGAR", 1, ACCENT, BACK);
+            number(126, 180, p->score, 1, 1, TEXT, BACK);
+            text(140, 180, p->keeper ? "PARADAS" : "GOLES", 1, TEXT, BACK);
+            number(194, 180, p->round, 1, 1, TEXT, BACK);
+            text(204, 180, "/5", 1, TEXT, BACK);
+            knob(0, "MODO", p->keeper ? "PORTERO" : "TIRADOR", ACCENT);
+            knob(1, "LADO", directions[p->aim], ACCENT);
+            text(128, 202, "PLAY JUEGA", 1, DIM, BACK);
+            text(128, 216, "EDIT NUEVA", 1, DIM, BACK);
         } else {
             unsigned count = betis_song_count(), position = betis_song_position();
-            text(8, 70, "CENTENARIO / MELODIA FM", 1, DIM, BACK);
+            text(8, 70, betis_song_title(), 1, DIM, BACK);
             if (!count) {
                 text(8, 96, "SIN HIMNO INTEGRADO", 1, TEXT, BACK);
                 text(8, 116, "REQUIERE BUILD LOCAL", 1, DIM, BACK);
@@ -1474,7 +1495,7 @@ static void betis_draw(void)
                 unsigned expected = betis_song_note();
                 text(8, 91, betis_song_mode() == 2
                     ? (position == count ? "OLE! COMPLETADO" : "TE ESPERO: TOCA LA NOTA")
-                    : betis_song_mode() == 1 ? "ESCUCHANDO EL HIMNO" : "LISTO PARA TOCAR", 1, ACCENT, BACK);
+                    : betis_song_mode() == 1 ? "ESCUCHANDO MELODIA" : "LISTO PARA TOCAR", 1, ACCENT, BACK);
                 text(8, 110, "PASO", 1, DIM, BACK);
                 number(44, 110, position, 3, 1, TEXT, BACK);
                 text(82, 110, "/", 1, DIM, BACK);
@@ -1493,8 +1514,10 @@ static void betis_draw(void)
                 text(8, 179, "PLAY ESCUCHA / EDIT APRENDE", 1, TEXT, BACK);
                 char value[12]; decimal(value, position, 1);
                 knob(0, "PASO", value, ACCENT);
-                text(67, 200, "REC REPITE FRASE", 1, DIM, BACK);
-                text(67, 214, "SCL PARA / HOME SALE", 1, DIM, BACK);
+                decimal(value, betis_song_selected() + 1, 1);
+                knob(1, "TEMA", value, ACCENT);
+                text(128, 200, "REC REPITE", 1, DIM, BACK);
+                text(128, 214, "SCL PARA", 1, DIM, BACK);
             }
         }
         text(8, 231, "FX PAGINA / HOME SALE", 1, DIM, BACK);
@@ -2059,8 +2082,22 @@ static int apply_controls(const struct fm1_controls *controls, uint32_t now,
     }
     if (page == BETIS && (pressed & BUTTON(FX))) {
         if (betis_song_stop()) { notice = "HYMN STOP FAILED"; notice_until = now + 2500U; }
-        betis_view = (betis_view + 1) % 5;
+        betis_view = (betis_view + 1) % 6;
         cache->middle_cache = ~0U;
+        goto controls_done;
+    }
+    if (page == BETIS && betis_view == 5 && !(pressed & BUTTON(HOME))) {
+        if (controls->encoders[2])
+            betis_penalty_reset((unsigned)clamp((int)betis_penalties.keeper + controls->encoders[2], 0, 1));
+        if (controls->encoders[3]) {
+            betis_penalties.aim = (uint8_t)clamp((int)betis_penalties.aim + controls->encoders[3], 0, 2);
+            betis_penalties.result = 0;
+        }
+        if (pressed & BUTTON(EDIT)) { betis_penalty_reset(betis_penalties.keeper); edit_down = edit_long = 0; }
+        if (pressed & BUTTON(PLAY)) {
+            if (betis_penalty_shoot(now)) { notice = "EDIT NUEVA TANDA"; notice_until = now + 2500U; }
+            play_handled = 1;
+        }
         goto controls_done;
     }
     if (page == BETIS && betis_view == 4) {
@@ -2084,6 +2121,17 @@ static int apply_controls(const struct fm1_controls *controls, uint32_t now,
             goto controls_done;
         }
         if (encoder_active(controls->encoders)) {
+            if (controls->encoders[3] && betis_song_total()) {
+                unsigned selected = (unsigned)clamp((int)betis_song_selected() + controls->encoders[3],
+                    0, (int)betis_song_total() - 1);
+                if (selected != betis_song_selected()) {
+                    if (!release_keys()) return 0;
+                    blocked_keys |= controls->keys;
+                    if (betis_song_select(selected)) {
+                        notice = "SONG CHANGE FAILED"; notice_until = now + 2500U;
+                    }
+                }
+            }
             if (controls->encoders[2] && betis_song_seek(controls->encoders[2])) {
                 notice = "START APRENDER WITH EDIT"; notice_until = now + 2500U;
             }
@@ -2670,6 +2718,10 @@ static int apply_controls(const struct fm1_controls *controls, uint32_t now,
         }
     }
 controls_done:
+    if (page == BETIS && betis_view == 5) {
+        blocked_keys |= controls->keys;
+        writing = 0;
+    }
     if (betis_song_mode() && (page != BETIS || betis_view != 4)) {
         if (betis_song_stop()) { notice = "HYMN STOP FAILED"; notice_until = now + 2500U; }
     }
@@ -2705,7 +2757,7 @@ controls_done:
         retry_reset = 0;
         memset(key_note, 0xff, sizeof key_note);
     }
-    uint32_t keys = controls->keys & ~blocked_keys;
+    uint32_t keys = page == BETIS && betis_view == 5 ? 0 : controls->keys & ~blocked_keys;
     /* EDIT's labelled black keys select OP1..6 / Pitch / Global / Mono / Poly;
      * they must never also generate keyboard MIDI, including on page changes. */
     if (page == FM_EDIT)
@@ -2929,7 +2981,8 @@ unsigned groove_screen_web_context(void)
         tone_part(), tone_pages[track][tone_slot()], effects_page,
         ble_view, advanced_edit, glo_down && glo_used,
         (page == STEP_EDIT || (page == STEPS && seq_page)) ? cursor : 0, seq_page, arp_page,
-        page == BETIS ? betis_view : 0};
+        page == BETIS ? betis_view : 0,
+        page == BETIS && betis_view == 4 ? betis_song_selected() | (betis_song_mode() << 8) : 0};
     return signature(2166136261U, context, sizeof context);
 }
 unsigned groove_screen_web_mask(void)
@@ -2946,7 +2999,8 @@ unsigned groove_screen_web_mask(void)
     if ((page == OVERVIEW || (page == STEPS && !seq_page)) && groove_clock_mode()) mask &= ~8U;
     if (page == BETIS) {
         if (betis_view == 2) return 1U;
-        if (betis_view == 4) return betis_song_mode() == 2 ? 1U : 0;
+        if (betis_view == 4) return betis_song_total() ? (betis_song_mode() == 2 ? 3U : 2U) : 0;
+        if (betis_view == 5) return 3U;
         if (betis_view == 3) return 0;
         if (!betis_view && groove_source_type(track) != GROOVE_DX7) mask &= ~1U;
         if (groove_clock_mode()) mask &= ~8U;

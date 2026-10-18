@@ -32,23 +32,30 @@ payload identity and corresponding-source completeness.
   MIDI activity, and HOME+FX navigation. Uses the original band compositor,
   DMA ownership and existing input/transport handlers.
 - FX cycles studio / La Grada / representative 2025/26 XI / club history /
-  Himno-Aprender. La Grada offers
+  Himno-Aprender / Penaltis. La Grada offers
   four original percussion patterns (EDIT explicitly loads track 8), a manual
   0-99 scoreboard and a four-second goal celebration. The XI is explicitly a
   project selection from the 2025/26 squad, not an official fixed match lineup.
-- `tools/Compile-Hymn.py` extracts a monophonic top-line melody from a selected
-  track in user-supplied MIDI, retaining tempo and folding octaves to 27 keys.
-  The ignored generated `app/betis_song_data.h` is embedded only in a private
-  `Build.ps1 -LocalHymn` build, distributed in ignored `local/docs/`.
-  Public builds refuse to run if that header is present. See README for the
-  matching private source archive and public source-URL caveat.
+- `tools/Compile-Hymn.py` isolates the centenary lead register and the charanga
+  lead using its original multitrack score, verifying every guide onset/pitch
+  against the supplied merged FM1 MIDI. Each song uses a constant transposition
+  into 27 keys; all melodic intervals, note lengths, rests and tempo changes
+  are preserved. Over-wide melodies fail explicitly, never octave-fold.
+  The generated `app/betis_song_data.h` is tracked and shipped with public
+  firmware, Wasm and corresponding source following the user's distribution
+  authorization. It stores two-byte note/timing codes and shared timing pairs.
 - Aprender: EDIT starts, the next physical/on-screen key lights, correct new
   key presses advance one step, errors wait, K1 seeks and REC repeats a group
   of eight notes. SCL stops; HOME exits and restores tuning/ARP. Input evaluation
   uses the panel/on-screen keyboard, not external MIDI. PLAY listens to the
-  embedded melody. Projects and samples are not written by the lesson.
+  selected embedded melody. K2 changes songs, stops playback and resets progress.
+  Projects and samples are not written by the lesson.
+- Penaltis: K1 selects shooter/goalkeeper, K2 screen-relative direction, PLAY
+  resolves an attempt against a hidden computer choice, EDIT starts a fresh
+  five-attempt game. Matching directions mean a save; score counts goals for
+  shooters or saves for goalkeepers. Piano keys are muted; projects are untouched.
 - `web/betis-grada.html`: web-only local authorized-audio players for traditional
-  and centenary hymns. No protected music or lyrics are supplied; selected files
+  and centenary hymns. No recordings or lyrics are supplied; selected files
   are neither uploaded nor persisted. Native patterns remain original percussion.
 - `web/betis-midi.js`: local MIDI-to-FM adaptation, tempo/sustain preservation,
   eight-voice limit, type-0 MIDI export and real synth playback. Supplied

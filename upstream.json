@@ -8,6 +8,7 @@
     "app/betis.h",
     "app/betis_art.h",
     "app/betis_pixels.h",
+    "app/betis_song_data.h",
     "app/screen.c",
     "web/engine/Simulator.c"
   ],

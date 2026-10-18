@@ -47,27 +47,41 @@ int betis_midi_prepare(unsigned enabled)
     }
     return 0;
 }
-struct betis_song_step { uint16_t duration; uint8_t note; };
+struct betis_song_timing { uint16_t duration, gate; };
+struct betis_song_data { const char *title; const uint16_t *steps; unsigned count; };
 #if __has_include("betis_song_data.h")
 #include "betis_song_data.h"
 #else
-#define BETIS_SONG_COUNT 0U
-static const struct betis_song_step betis_song[1] = {{600, 60}};
+#define BETIS_SONG_TOTAL 0U
+static const struct betis_song_timing betis_song_timings[1] = {{600, 600}};
+static const struct betis_song_data betis_songs[1] = {{"SIN CANCIONES", NULL, 0}};
 #endif
-static unsigned song_position, song_mode, song_errors, song_sounding = 128;
-static uint32_t song_deadline;
+static unsigned song_selected, song_position, song_mode, song_errors, song_sounding = 128;
+static uint32_t song_deadline, song_release;
 #ifdef __wasm__
 #define BETIS_EXPORT(name) __attribute__((export_name(name)))
 #else
 #define BETIS_EXPORT(name)
 #endif
-BETIS_EXPORT("betis_song_count") unsigned betis_song_count(void) { return BETIS_SONG_COUNT; }
+BETIS_EXPORT("betis_song_total") unsigned betis_song_total(void) { return BETIS_SONG_TOTAL; }
+BETIS_EXPORT("betis_song_selected") unsigned betis_song_selected(void) { return song_selected; }
+const char *betis_song_title(void) { return betis_songs[song_selected].title; }
+BETIS_EXPORT("betis_song_count") unsigned betis_song_count(void) { return betis_songs[song_selected].count; }
 BETIS_EXPORT("betis_song_position") unsigned betis_song_position(void) { return song_position; }
 BETIS_EXPORT("betis_song_mode") unsigned betis_song_mode(void) { return song_mode; }
 BETIS_EXPORT("betis_song_errors") unsigned betis_song_errors(void) { return song_errors; }
 BETIS_EXPORT("betis_song_note") unsigned betis_song_note(void)
 {
-    return song_position < BETIS_SONG_COUNT ? betis_song[song_position].note : 128;
+    return song_position < betis_song_count()
+        ? 53U + (betis_songs[song_selected].steps[song_position] & 31U) : 128;
+}
+BETIS_EXPORT("betis_song_duration") unsigned betis_song_duration(void)
+{
+    unsigned duration = 0;
+    const struct betis_song_data *song = &betis_songs[song_selected];
+    for (unsigned i = 0; i < song->count; ++i)
+        duration += betis_song_timings[song->steps[i] >> 5].duration;
+    return duration;
 }
 static int song_message(uint8_t status, uint8_t note, uint8_t velocity)
 {
@@ -81,9 +95,17 @@ int betis_song_stop(void)
     song_mode = 0;
     return betis_midi_prepare(0);
 }
+BETIS_EXPORT("betis_song_select") int betis_song_select(unsigned selected)
+{
+    if (selected >= BETIS_SONG_TOTAL) return -1;
+    if (betis_song_stop()) return -1;
+    song_selected = selected;
+    song_position = song_errors = 0;
+    return 0;
+}
 int betis_song_start(unsigned mode, uint32_t now)
 {
-    if (!BETIS_SONG_COUNT || mode < 1 || mode > 2) return -1;
+    if (!betis_song_count() || mode < 1 || mode > 2) return -1;
     if (betis_song_stop() || betis_midi_prepare(1)) return -1;
     const uint8_t stop = 0xfc;
     if (fm1_midi_post(&stop, 1)) { (void)betis_midi_prepare(0); return -1; }
@@ -94,29 +116,61 @@ int betis_song_start(unsigned mode, uint32_t now)
 }
 int betis_song_tick(uint32_t now)
 {
-    if (song_mode != 1 || (int32_t)(now - song_deadline) < 0) return 0;
-    if (song_sounding < 128 && song_message(0x80, song_sounding, 0)) return -1;
-    song_sounding = 128;
-    if (song_position >= BETIS_SONG_COUNT) return betis_song_stop();
-    const struct betis_song_step *step = &betis_song[song_position];
-    if (song_message(0x90, step->note, 90)) return -1;
-    song_sounding = step->note;
-    song_deadline += step->duration;
+    if (song_mode != 1) return 0;
+    if (song_sounding < 128 && (int32_t)(now - song_release) >= 0) {
+        if (song_message(0x80, song_sounding, 0)) return -1;
+        song_sounding = 128;
+    }
+    if ((int32_t)(now - song_deadline) < 0) return 0;
+    if (song_position >= betis_song_count()) return betis_song_stop();
+    unsigned step = betis_songs[song_selected].steps[song_position];
+    const struct betis_song_timing *timing = &betis_song_timings[step >> 5];
+    unsigned note = 53U + (step & 31U);
+    if (song_message(0x90, note, 90)) return -1;
+    song_sounding = note;
+    song_release = song_deadline + timing->gate;
+    song_deadline += timing->duration;
     ++song_position;
     return 0;
 }
 void betis_song_press(unsigned note)
 {
-    if (song_mode != 2 || song_position >= BETIS_SONG_COUNT) return;
-    if (note == betis_song[song_position].note) ++song_position;
+    if (song_mode != 2 || song_position >= betis_song_count()) return;
+    if (note == betis_song_note()) ++song_position;
     else if (song_errors < 9999) ++song_errors;
 }
 int betis_song_seek(int delta)
 {
-    if (song_mode != 2 || !BETIS_SONG_COUNT) return -1;
+    unsigned count = betis_song_count();
+    if (song_mode != 2 || !count) return -1;
     int next = (int)song_position + delta;
-    song_position = next < 0 ? 0 : (unsigned)next >= BETIS_SONG_COUNT
-        ? BETIS_SONG_COUNT - 1 : (unsigned)next;
+    song_position = next < 0 ? 0 : (unsigned)next >= count ? count - 1 : (unsigned)next;
+    return 0;
+}
+struct betis_penalties betis_penalties;
+static uint32_t penalty_random = 1907;
+BETIS_EXPORT("betis_penalty_state") unsigned betis_penalty_state(void)
+{
+    const struct betis_penalties *p = &betis_penalties;
+    return p->keeper | (p->aim << 1) | (p->opponent << 3) |
+        (p->round << 5) | (p->score << 8) | (p->result << 11);
+}
+void betis_penalty_reset(unsigned keeper)
+{
+    memset(&betis_penalties, 0, sizeof betis_penalties);
+    betis_penalties.keeper = !!keeper;
+    betis_penalties.aim = 1;
+}
+int betis_penalty_shoot(uint32_t now)
+{
+    struct betis_penalties *p = &betis_penalties;
+    if (p->round >= 5) return -1;
+    penalty_random = (penalty_random ^ now) * 1664525U + 1013904223U;
+    p->opponent = (uint8_t)((penalty_random >> 16) % 3);
+    unsigned saved = p->aim == p->opponent;
+    p->result = saved ? 2 : 1;
+    p->score += p->keeper ? saved : !saved;
+    ++p->round;
     return 0;
 }
 int betis_rhythm_apply(unsigned rhythm)
@@ -174,8 +228,9 @@ int betis_tuning_cents(unsigned track, unsigned pitch)
 int betis_init(void)
 {
     midi_prepared = 0;
-    song_position = song_mode = song_errors = 0;
+    song_selected = song_position = song_mode = song_errors = 0;
     song_sounding = 128;
+    betis_penalty_reset(0);
     if (betis_scale_set(1)) return -1;
     groove_arp_set(0, 1);
     groove_sends_edit(0, 0, 5);

@@ -7,12 +7,10 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $upstream = Join-Path $root 'vendor\fm1_open'
 $out = Join-Path $root 'docs'
-$privateSong = Join-Path $upstream 'app\betis_song_data.h'
+$songHeader = Join-Path $upstream 'app\betis_song_data.h'
+if (!(Test-Path -LiteralPath $songHeader)) { throw 'Missing authorized melody header: restore app\betis_song_data.h' }
 if ($LocalHymn) {
-    if (!(Test-Path -LiteralPath $privateSong)) { throw 'Generate the private melody header with tools\Compile-Hymn.py first' }
     $out = Join-Path $root 'local\docs'
-} elseif (Test-Path -LiteralPath $privateSong) {
-    throw 'Private hymn header present: use -LocalHymn or move it outside app before a public build'
 }
 $utf8 = New-Object Text.UTF8Encoding $false
 & (Join-Path $root 'tools\Get-Toolchains.ps1')
@@ -73,7 +71,7 @@ if (!$html.Contains($feedbackAnchor)) { throw 'Upstream simulator feedback contr
 $html = $html.Replace($feedbackAnchor, $feedbackAnchor + @'
 
     if(state?.[1]===19){
-      say('Betis: FX cambia pagina. Estudio: SCL escala. Himno: PLAY escucha, EDIT aprende, SCL para, REC repite frase. HOME sale.');
+      say('Betis: FX cambia pagina. Himno: K2 tema, PLAY escucha, EDIT aprende, K1 paso. Penaltis: K1 modo, K2 lado, PLAY juega, EDIT nueva tanda. HOME sale.');
       return;
     }
 '@)
@@ -81,7 +79,9 @@ $banner = @'
 <aside style="margin:16px;padding:16px;border:2px solid #22c55e;background:#102619;color:white">
 <strong>FM1 BETIS MODE - unofficial community firmware</strong>
 <p>Real FM1 Open engine and 240x240 TFT emulator. HOME+FX: Betis dashboard.
-SCL on dashboard: scale on/off. FX: studio / crowd / 2025-26 XI / history / hymn and learning.
+SCL on dashboard: scale on/off. FX: studio / crowd / 2025-26 XI / history / songs and learning / penalties.
+Both authorized teaching melodies are integrated. Songs: K2 selects, PLAY listens, EDIT teaches.
+Penalties: K1 shooter/goalkeeper, K2 direction, PLAY attempts, EDIT restarts.
 Crowd: K1 rhythm, EDIT loads track 8, K2/K3 goals, K4 BPM.</p>
 <p><a href="FM1_BETIS_MODE.fwsc">Download firmware</a> |
 <a href="source.zip">Matching source + SDK</a> |
@@ -91,9 +91,6 @@ Crowd: K1 rhythm, EDIT loads track 8, K2/K3 goals, K4 BPM.</p>
 Back up projects and samples before updating. No automatic device flashing.</p>
 </aside>
 '@
-if ($LocalHymn) {
-    $banner += '<p><strong>LOCAL PRIVATE HYMN BUILD - do not publish. Its matching source is the adjacent local source.zip, not the public source URL.</strong></p>'
-}
 if (!$html.Contains('<main>')) { throw 'Upstream browser main contract changed' }
 $grada = [IO.File]::ReadAllText((Join-Path $root 'web\betis-grada.html'))
 $midiScript = [IO.File]::ReadAllText((Join-Path $root 'web\betis-midi.js'))

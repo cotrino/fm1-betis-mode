@@ -192,6 +192,8 @@ try {
   tap(2);
   check(c.betis_screen_view() === 4, 'FX opens hymn and learning screen');
   tap(2);
+  check(c.betis_screen_view() === 5, 'FX opens penalties');
+  tap(2);
   check(c.betis_screen_view() === 0, 'FX returns to the musical studio');
   c.sim_control(0,8,1); c.sim_control(0,2,1); c.sim_release();
   check((match() & 3) === 0 && state()[1] === 19, 'HOME+FX always resets to the Betis studio');
@@ -208,10 +210,22 @@ try {
   check(c.betis_midi_prepare(0) === 0 && (c.sim_arp(0) & 256) !== 0, 'Hymn stop re-enables the original arp state');
   for (let i = 0; i < 4; i++) tap(2);
   check(c.betis_screen_view() === 4, 'Integrated hymn page is reachable');
-  const lessonCount = c.betis_song_count();
-  if (lessonCount) {
-    check(lessonCount === 201, 'Private centenary melody contains all 201 teaching steps');
+  check(c.betis_song_total() === 2, 'Both authorized teaching melodies are embedded in the release');
+  const songExpectations = [
+    {count:193, duration:55749, hash:352322366},
+    {count:355, duration:180691, hash:849086588}
+  ];
+  for (let song = 0; song < 2; song++) {
+    if (song) c.sim_control(2, 3, 1);
+    const {count:lessonCount, duration, hash} = songExpectations[song];
+    check(c.betis_song_selected() === song && c.betis_song_count() === lessonCount,
+      `K2 selects song ${song + 1} with all ${lessonCount} melody notes`);
+    check(c.betis_song_duration() === duration, `Song ${song + 1} retains exact score timing and final note length`);
+    c.sim_lcd_targets();
+    check(c.sim_lcd_mask() === 2 && knobs().includes('TEMA'), 'Browser exposes song selection while stopped');
     tap(6);
+    c.sim_lcd_targets();
+    check(c.sim_lcd_mask() === 3, 'Browser exposes both step and song controls during lessons');
     check(c.betis_song_mode() === 2 && c.betis_song_position() === 0, 'EDIT starts Aprender at step zero');
     check(c.betis_tuning_cents(0, 1) === 0 && !(c.sim_arp(0) & 256), 'Lesson uses original pitch classes without arp');
     render(256);
@@ -229,14 +243,17 @@ try {
     c.sim_control(2, 2, -127);
     check(c.betis_song_position() === 0, 'Lesson seeking clamps at the first note');
     const flashBeforeLesson = c.sim_flash_revision();
+    let melodyHash = 2166136261;
     for (let step = 0; step < lessonCount; step++) {
       const note = c.betis_song_note(), key = note - 53;
+      melodyHash = Math.imul(melodyHash ^ note, 16777619) >>> 0;
       check(key >= 0 && key < 27, `Lesson note ${step + 1} fits the physical keyboard`);
       c.sim_lcd_targets();
       check(state()[168 + 14 + key] === 1, `Next key LED lights for step ${step + 1}`);
       c.sim_control(1, key, 1); c.sim_control(1, key, 0); render(8);
       check(c.betis_song_position() === step + 1, `Correct panel note advances step ${step + 1}`);
     }
+    check(melodyHash === hash, `Song ${song + 1} preserves every score-derived melody interval without octave folding`);
     check(c.betis_song_note() === 128, 'Completed lesson has no phantom next note');
     check(c.sim_flash_revision() === flashBeforeLesson, 'Completing the lesson does not write flash');
     tap(3);
@@ -244,18 +261,78 @@ try {
       (c.sim_arp(0) & 256) !== 0, 'SCL stops and restores scale and arp');
     tap(12);
     check(c.betis_song_mode() === 1, 'PLAY starts the integrated hymn without external MIDI');
-    const hymnSound = render(21000);
+    const hymnSound = render(Math.ceil(duration * 44.1 / 128) + 16);
     check(hymnSound.rms > 0.00001 && hymnSound.peak <= 1.00001, 'Integrated melody produces bounded audible FM audio');
     check(c.betis_song_mode() === 0 && c.betis_song_position() === lessonCount, 'Integrated hymn finishes every melody step');
     render(4000);
     check(render(256).rms < 0.0001, 'Integrated hymn releases notes and decays to silence');
-    tap(6); tap(8);
-    check(c.betis_song_mode() === 0 && state()[1] === 0 &&
-      c.betis_tuning_cents(0, 1) === tuningBeforeHymn, 'HOME exits learning and restores tuning');
-  } else {
-    tap(6);
-    check(c.betis_song_mode() === 0, 'Public build explicitly refuses a lesson without private hymn data');
   }
+  const selected = c.betis_song_selected();
+  check(c.betis_song_select(2) !== 0 && c.betis_song_selected() === selected,
+    'Invalid song selection is explicitly rejected without changing state');
+  c.sim_control(2, 3, -127);
+  check(c.betis_song_selected() === 0, 'K2 clamps to the first song');
+  tap(12); render(64);
+  c.sim_control(2, 3, 127);
+  check(c.betis_song_selected() === 1 && c.betis_song_position() === 0 &&
+    c.betis_song_mode() === 0 && c.betis_tuning_cents(0, 1) === tuningBeforeHymn &&
+    (c.sim_arp(0) & 256) !== 0, 'Changing songs stops playback, resets progress and restores tuning/arp');
+  render(4000);
+  check(render(256).rms < 0.0001, 'Changing songs releases the previous melody without stuck notes');
+  tap(6); tap(8);
+  check(c.betis_song_mode() === 0 && state()[1] === 0 &&
+    c.betis_tuning_cents(0, 1) === tuningBeforeHymn, 'HOME exits learning and restores tuning');
+  c.sim_control(0,8,1); c.sim_control(0,2,1); c.sim_release();
+  for (let i = 0; i < 4; i++) tap(2);
+  tap(12); render(64); tap(2);
+  check(c.betis_screen_view() === 5 && c.betis_song_mode() === 0 &&
+    c.betis_tuning_cents(0, 1) === tuningBeforeHymn, 'Opening penalties stops the song and restores tuning');
+  const beforeGame = project(), flashBeforeGame = c.sim_flash_revision();
+  const penalty = () => {
+    const packed = c.betis_penalty_state();
+    return {keeper:packed & 1, aim:(packed >>> 1) & 3, opponent:(packed >>> 3) & 3,
+      round:(packed >>> 5) & 7, score:(packed >>> 8) & 7, result:(packed >>> 11) & 3};
+  };
+  for (let role = 0; role < 2; role++) {
+    if (role) c.sim_control(2, 2, 1);
+    tap(6);
+    check(penalty().keeper === role && penalty().round === 0 && penalty().score === 0,
+      `Role ${role}: EDIT starts a fresh five-penalty game`);
+    c.sim_lcd_targets();
+    check(c.sim_lcd_mask() === 3 && knobs().includes('MODO') && knobs().includes('LADO'),
+      'Penalty browser knobs match hardware role/direction controls');
+    let score = 0;
+    for (let round = 0; round < 5; round++) {
+      c.sim_control(2, 3, -127); c.sim_control(2, 3, round % 3);
+      check(penalty().aim === round % 3, 'K2 chooses left, center or right');
+      tap(12);
+      const p = penalty(), saved = p.aim === p.opponent;
+      score += role ? Number(saved) : Number(!saved);
+      check(p.opponent < 3 && p.round === round + 1 && p.score === score &&
+        p.result === (saved ? 2 : 1), `Role ${role}: penalty ${round + 1} scores the real outcome`);
+    }
+    const completed = c.betis_penalty_state();
+    tap(12);
+    check(c.betis_penalty_state() === completed, 'A sixth attempt is refused until a new game');
+  }
+  c.sim_control(2, 2, -127);
+  check(penalty().keeper === 0 && penalty().round === 0, 'Changing role resets the game and clamps to shooter');
+  c.sim_control(2, 2, 127);
+  check(penalty().keeper === 1, 'Role selection clamps to goalkeeper');
+  c.sim_control(2, 3, 127);
+  check(penalty().aim === 2, 'Direction selection clamps to the right post');
+  render(4000); c.sim_panic();
+  c.sim_control(1, 13, 1); render(64);
+  tap(2);
+  check(c.betis_screen_view() === 0 && render(256).rms < 0.0001,
+    'Game keys do not sound or become stuck when exiting to the studio');
+  c.sim_control(1, 13, 0);
+  const afterGame = project();
+  check(beforeGame.every((byte, i) => byte === afterGame[i]) &&
+    c.sim_flash_revision() === flashBeforeGame, 'Penalties never alter the project or write flash');
+  for (let i = 0; i < 5; i++) tap(2);
+  tap(8);
+  check(state()[1] === 0, 'HOME exits penalties to the original overview');
   c.sim_control(0,8,1); c.sim_control(0,2,1); c.sim_release();
   check(c.sim_select(7, 0) === 0, 'Test can replace track 8 with FM');
   c.sim_open(19);

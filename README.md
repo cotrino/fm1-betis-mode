@@ -44,8 +44,8 @@ Loading a saved project restores its own tuning, sounds, patterns and arp.
 
 ### Mas grada: guasa, goles y memoria betica
 
-From the Betis studio, **FX** cycles through five shared hardware/browser views:
-studio, **La Grada**, **Once 25/26**, **Memoria Betica**, and **Himno / Aprender**. HOME+FX returns to
+From the Betis studio, **FX** cycles through six shared hardware/browser views:
+studio, **La Grada**, **Once 25/26**, **Memoria Betica**, **Himno / Aprender**, and **Penaltis**. HOME+FX returns to
 the studio; HOME still opens the original overview.
 
 - **La Grada:** K1 selects one of four original synthesized percussion patterns:
@@ -69,7 +69,8 @@ the studio; HOME still opens the original overview.
 The web-only hymn corner has separate **traditional / centenary** local-audio
 players. Supply your own authorized files (up to 32 MiB each). Files are not
 uploaded, stored, bundled, synchronized to transport, or copied into firmware.
-No protected hymn lyrics, melodies, or recordings are distributed. The four
+No hymn lyrics or recordings are distributed; the two integrated teaching melodies
+are redistributed with the user's confirmed authorization. The four
 crowd patterns are original percussion, not versions of those hymns. For
 device samples use the existing sample editor and its supported limits.
 
@@ -86,9 +87,10 @@ external MIDI sequencer with track 1 FM/12-TET/ARP off and track 8 808.
 Web playback uses the real AudioWorklet synth. It stops transport, temporarily
 disables track 1's scale/ARP, and restores both at stop/end. Stop it before
 editing or saving a project. Hiding the tab stops playback to prevent
-background timer drift and stuck notes. Supplied originals and exported
-arrangements remain local under ignored `himnos/`; they are not in Git, the
-public source ZIP, public firmware, or deployed web page.
+background timer drift and stuck notes. Supplied originals and full eight-voice
+MIDI exports remain local under ignored `himnos/`; those files are not redistributed.
+Only the two authorized melody-only teaching tables described below are bundled
+in Git, corresponding source, firmware and the deployed emulator.
 
 References checked for this implementation:
 [Betisweb's 2025/26 squad listing](https://www.betisweb.com/web/list/plantilla-betis-25-26/)
@@ -96,43 +98,70 @@ for season membership (the XI itself is our selection), and the
 [club's account of the 1935 championship](https://www.realbetisbalompie.es/noticias/actualidad/historia-el-ano-que-fuimos-campeones-24228).
 The season is explicitly 2025/26, as requested, regardless of the current date.
 
-### Integrated hymn and Aprender (private local build)
+### Integrated songs and Aprender
 
-The supplied centenary MIDI can be compiled into a monophonic FM melody
-that fits the physical 27-key keyboard. At each onset, the highest pitched
-note in the selected melody track is used; out-of-range notes move by octaves,
-preserving pitch class. This is a teaching reduction, **not** the earlier
-eight-voice accompaniment arrangement. The melody, not recorded audio, lives
-inside the native firmware and matching Wasm.
+Both authorized monophonic teaching arrangements are included in the published
+firmware and Wasm; no external sequencer or MIDI upload is needed:
+
+| K2 | Song | Steps | Playable MIDI range | Length |
+| --- | --- | --- | --- | --- |
+| 1 | Centenario | 193 | 59-73 | 55.749 s |
+| 2 | No puedo vivir sin ti | 355 | 54-78 | 180.691 s |
+
+The centenary lead is isolated from track 1's upper register (source pitches
+84 and above), excluding eight accompaniment-only onsets that were previously
+mistaken for melody. For the merged charanga FM1 MIDI, the original multitrack
+score's first track identifies the lead; every selected onset/pitch is checked
+against the supplied FM1 arrangement within 1 ms. Its accompaniment-only intro
+is omitted. At simultaneous lead onsets, the highest pitch is selected.
+
+Each complete melody receives **one constant transposition**, centered on the
+27-key keyboard: -29 semitones for Centenario, -22 for the charanga. This changes
+the key but preserves **every melodic interval and its direction**; individual
+notes are never octave-folded. Note lengths, rests and tempo changes are retained.
+These are melody-only teaching reductions, not the earlier eight-voice arrangements.
 
 On **Himno / Aprender**, PLAY listens, EDIT starts the step-by-step lesson,
 SCL stops, and HOME exits. The next note's physical key LED lights; a correct
 new key press advances once, errors do not advance, and holding a key does not
 auto-repeat. No rhythmic scoring is claimed. K1 seeks, REC repeats an
-eight-note phrase. Track 1 must be FM; it uses a fixed octave, temporarily
+eight-note phrase. K2 selects the song, stopping playback and resetting lesson
+progress/errors. Track 1 must be FM; it uses a fixed octave, temporarily
 disables its scale/ARP and restores those settings at stop/exit. Follow input
 is the FM1 panel or on-screen keyboard; external MIDI input is not evaluated.
 Do not load/save projects or change patches during a lesson.
 
 ```powershell
-python .\tools\Compile-Hymn.py .\himnos\himno-centenario-del-betis.mid --track 1 --output .\vendor\fm1_open\app\betis_song_data.h
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Build.ps1 -LocalHymn
-powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Verify.ps1 -LocalHymn
+python .\tools\Compile-Hymn.py .\himnos\himno-centenario-del-betis.mid --track 1 --min-note 84 --charanga .\himnos\no-puedo-vivir-sin-ti-charanga-fm1.mid --charanga-melody .\himnos\no-puedo-vivir-sin-ti-charanga.mid --output .\vendor\fm1_open\app\betis_song_data.h
+python -m unittest discover -s tests -p "test_*.py" -v
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Build.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\Verify.ps1
 ```
 
-Private outputs are in ignored `local/docs/`, including firmware, a self-contained
-workbench, and the **matching private source ZIP** with the generated melody header.
-The SDK's embedded public source URL does not identify this private build; keep
-its adjacent private archive with it and do not redistribute without permission.
-Public builds refuse to run while the private header is in `app/`; move that
-header outside `app/` before building for public distribution. No official
-copyrighted photos or hymn data are committed.
+The generated compact melody header is tracked and included in the matching
+source ZIP, so public builds do not need the original MIDI files. The user
+confirmed authorization for distribution of both arrangements on 2026-10-18;
+see [THIRD_PARTY.md](THIRD_PARTY.md). Original MIDI files remain ignored.
+`Build.ps1 -LocalHymn` / `Verify.ps1 -LocalHymn` remain optional output-directory
+aliases for `local/docs/`, with the same authorized content as the public build.
+
+### Penaltis
+
+K1 selects **Tirador** (shooter) or **Portero** (goalkeeper); changing role starts
+a fresh game. K2 chooses left, center or right, always relative to the screen.
+PLAY resolves one attempt against the computer's hidden direction: matching
+directions mean a save, otherwise a goal. A five-attempt game counts goals in
+shooter mode and saves in goalkeeper mode. EDIT starts another game; HOME exits.
+The goal, keeper, ball and result are drawn on the real shared TFT framebuffer.
+This is a direction-guessing minigame, not a football physics simulation.
+It never edits projects or writes flash, and piano keys are muted in this view.
 
 ### Original pixel artwork
 
 The shield, mascot and eleven stylized fan portraits are original 32x40,
 16-color illustrations rendered at 2x on the TFT. They use lossless run-length
-compression to preserve the official flash/VM/user-storage reservation.
+compression with a shared row dictionary to preserve the official
+flash/VM/user-storage reservation without changing a single sprite pixel.
 Isco, Antony, Cucho and the other selected players have separate portraits.
 They are interpretive cartoons, not official photos or photorealistic likenesses.
 Regenerate with `python .\tools\Generate-Betis-Art.py`; inspect the contact sheet

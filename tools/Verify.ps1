@@ -40,20 +40,20 @@ foreach ($pair in @(@('FM1_PACKAGE','FM1_BETIS_MODE.fwsc'),@('FM1_SIMULATOR','si
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $out 'source.zip'))
 try {
-    if (@($zip.Entries | Where-Object { $_.FullName.StartsWith('himnos/') -or
-        (!$LocalHymn -and $_.FullName.EndsWith('/betis_song_data.h')) }).Count) {
-        throw 'Private user music must not enter the public corresponding-source archive'
+    if (@($zip.Entries | Where-Object { $_.FullName.StartsWith('himnos/') }).Count) {
+        throw 'Original user MIDI files must not enter the corresponding-source archive'
     }
-    if ($LocalHymn -and !$zip.GetEntry('vendor/fm1_open/app/betis_song_data.h')) {
-        throw 'Private matching source must contain the integrated melody header'
+    if (!$zip.GetEntry('vendor/fm1_open/app/betis_song_data.h')) {
+        throw 'Matching source must contain the integrated melody header'
     }
     $requiredSources = @('Build.ps1','tools/Verify.ps1','web/betis-grada.html','web/betis-midi.js',
         'tools/Compile-Hymn.py','tools/Generate-Betis-Art.py','vendor/fm1_open/app/betis_pixels.h',
+        'tests/test_compile_hymn.py','tests/verify-emulator.html',
         'vendor/fm1_open/app/screen.c',
         'vendor/fm1_open/app/betis.c','vendor/fm1_open/app/betis.h',
         'vendor/fm1_open/web/engine/Simulator.c','vendor/fm1_open/sdk/manifest.json',
         'vendor/fm1_open/sdk/Build.ps1','LICENSE.md','THIRD_PARTY.md')
-    if ($LocalHymn) { $requiredSources += 'vendor/fm1_open/app/betis_song_data.h' }
+    $requiredSources += 'vendor/fm1_open/app/betis_song_data.h'
     foreach ($relative in $requiredSources) {
         $entry = $zip.GetEntry($relative)
         if (!$entry) { throw "Corresponding source missing: $relative" }

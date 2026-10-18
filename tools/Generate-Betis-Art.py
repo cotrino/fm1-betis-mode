@@ -151,14 +151,28 @@ def main():
               "static const uint16_t betis_palette[16] = {" +
               ",".join(f"0x{p:04x}" for p in PALETTE) + "};",
               "/* One byte: upper nibble run length minus one, lower nibble color. */"]
-    for index, canvas in enumerate(art):
-        output.append(f"static const uint8_t betis_pixels_{index}[] = {{")
-        data = canvas.packed()
-        for at in range(0, len(data), 32):
-            output.append("        " + ",".join(f"0x{b:02x}" for b in data[at:at + 32]) + ",")
+    rows, sprites, data, offsets = {}, [], [], []
+    for canvas in art:
+        ids = []
+        for y in range(HEIGHT):
+            row = tuple(canvas.pixels[y * WIDTH:(y + 1) * WIDTH])
+            if row not in rows:
+                rows[row] = len(rows)
+                offsets.append(len(data))
+                c = Canvas()
+                c.pixels = list(row)
+                data.extend(c.packed())
+            ids.append(rows[row])
+        sprites.extend(ids)
+    if len(rows) > 256:
+        raise ValueError("Sprite row dictionary exceeds byte-sized indices")
+    for name, kind, values in [("betis_pixel_rows", "uint8_t", data),
+                                ("betis_row_offsets", "uint16_t", offsets),
+                                ("betis_sprite_rows", "uint8_t", sprites)]:
+        output.append(f"static const {kind} {name}[] = {{")
+        for at in range(0, len(values), 32):
+            output.append("    " + ",".join(str(v) for v in values[at:at + 32]) + ",")
         output.append("};")
-    output.append("static const uint8_t *const betis_pixels[13] = {" +
-                  ",".join(f"betis_pixels_{index}" for index in range(13)) + "};")
     output.extend(["#endif", ""])
     root = Path(__file__).resolve().parent.parent
     (root / "vendor/fm1_open/app/betis_pixels.h").write_text(
