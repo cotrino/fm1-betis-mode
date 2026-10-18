@@ -1,0 +1,15 @@
+{
+  "repository": "https://github.com/m-vave/fm1_open",
+  "commit": "b178ac43c25f010c60a878056fb5331fe693fd62",
+  "release": "FM1 Open V13",
+  "toolchain": "JieLi 2.5.2 / PI32v2 clang 4.0.1 r3",
+  "modifications": [
+    "app/betis.c",
+    "app/betis.h",
+    "app/betis_art.h",
+    "app/screen.c",
+    "web/engine/Simulator.c"
+  ],
+  "sdk_modified": false,
+  "hardware_tested": false
+}

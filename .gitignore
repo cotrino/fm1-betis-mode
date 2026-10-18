@@ -1,0 +1,5 @@
+/build/
+/web/betis_mode.js
+/web/betis_mode.wasm
+/.tools/
+/vendor/fm1_open/build/

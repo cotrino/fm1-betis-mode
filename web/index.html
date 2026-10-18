@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="M-VAVE FM1 Betis-mode audio and UI simulator">
+  <title>FM1 Betis Mode Simulator</title>
+  <style>
+    :root { color-scheme: dark; font: 16px system-ui, sans-serif; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #101510; color: #e9f2e9; }
+    main { width: min(92vw, 640px); }
+    h1 { color: #32d66d; font-size: 1.4rem; }
+    canvas { width: min(100%, 512px); aspect-ratio: 2; image-rendering: pixelated; border: 2px solid #32d66d; background: #000; }
+    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1rem 0; }
+    label { display: grid; gap: .35rem; }
+    button, select { padding: .6rem; }
+    #status { min-height: 1.5em; color: #a8d8b4; }
+    .note { color: #a8d8b4; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>M-VAVE FM1 · Betis Mode</h1>
+    <canvas id="display" width="128" height="64" aria-label="Monochrome UI simulator preview"></canvas>
+    <div class="controls">
+      <label>Tempo: <output id="bpm-value">120 BPM</output>
+        <input id="bpm" type="range" min="60" max="180" value="120">
+      </label>
+      <label>Pasión drive
+        <input id="drive" type="range" min="0" max="127" value="64">
+      </label>
+      <label>Olé reverb
+        <input id="reverb" type="range" min="0" max="127" value="48">
+      </label>
+      <label>Duende chorus
+        <input id="chorus" type="range" min="0" max="127" value="32">
+      </label>
+      <label><span>Manque Pierda arpeggiator</span>
+        <input id="arpeggiator" type="checkbox" checked>
+      </label>
+    </div>
+    <button id="audio">Enable audio</button>
+    <button id="midi">Connect MIDI</button>
+    <p id="status" role="status" aria-live="polite">Simulator ready. Audio and MIDI are optional.</p>
+    <p class="note">Browser simulator only. This monochrome canvas is not the FM1's physical color TFT.</p>
+  </main>
+
+  <script>
+    var Module = {};
+    Module.onRuntimeInitialized = () => {
+      Module._betis_wasm_init();
+      const canvas = document.getElementById('display');
+      const context = canvas.getContext('2d');
+      const pixels = context.createImageData(128, 64);
+      const framebufferPointer = Module._betis_wasm_get_framebuffer();
+      const status = document.getElementById('status');
+      let audioContext;
+      let audioNode;
+      let audioPointer;
+      let started = false;
+
+      function draw() {
+        Module._betis_wasm_tick(Math.floor(performance.now()));
+        const framebuffer = new Uint8Array(Module.HEAPU8.buffer, framebufferPointer, 1024);
+        for (let y = 0; y < 64; y++) {
+          for (let x = 0; x < 128; x++) {
+            const on = framebuffer[(y >> 3) * 128 + x] & (1 << (y & 7));
+            const offset = (y * 128 + x) * 4;
+            pixels.data[offset] = on ? 30 : 0;
+            pixels.data[offset + 1] = on ? 220 : 0;
+            pixels.data[offset + 2] = on ? 90 : 0;
+            pixels.data[offset + 3] = 255;
+          }
+        }
+        context.putImageData(pixels, 0, 0);
+        requestAnimationFrame(draw);
+      }
+
+      function sendMidiMessage(data) {
+        const statusByte = data[0] & 0xf0;
+        const note = data[1];
+        const value = data[2];
+        if (statusByte === 0x90 && value > 0) {
+          Module._betis_wasm_note_on(note, value, Math.floor(performance.now()));
+        } else if (statusByte === 0x80 || (statusByte === 0x90 && value === 0)) {
+          Module._betis_wasm_note_off(note);
+        } else if (statusByte === 0xb0 && note >= 20 && note <= 22) {
+          Module._betis_wasm_set_knob(note - 20, value);
+          document.getElementById(['drive', 'reverb', 'chorus'][note - 20]).value = value;
+        } else if (statusByte === 0xb0 && note === 123) {
+          Module._betis_wasm_all_notes_off();
+        }
+      }
+
+      document.getElementById('bpm').addEventListener('input', event => {
+        const bpm = Number(event.target.value);
+        Module._betis_wasm_set_bpm(bpm);
+        document.getElementById('bpm-value').value = `${bpm} BPM`;
+      });
+      document.getElementById('arpeggiator').addEventListener('change', event => {
+        Module._betis_wasm_set_arpeggiator(event.target.checked ? 1 : 0);
+      });
+      ['drive', 'reverb', 'chorus'].forEach((id, index) => {
+        document.getElementById(id).addEventListener('input', event => {
+          Module._betis_wasm_set_knob(index, Number(event.target.value));
+        });
+      });
+      document.getElementById('midi').addEventListener('click', async () => {
+        if (!navigator.requestMIDIAccess) {
+          status.textContent = 'Web MIDI is unavailable in this browser. Use localhost or HTTPS.';
+          return;
+        }
+        try {
+          const access = await navigator.requestMIDIAccess();
+          const connectInputs = () => {
+            for (const input of access.inputs.values()) {
+              input.onmidimessage = event => sendMidiMessage(event.data);
+            }
+          };
+          connectInputs();
+          access.onstatechange = connectInputs;
+          status.textContent = `MIDI connected (${access.inputs.size} input${access.inputs.size === 1 ? '' : 's'}).`;
+        } catch (error) {
+          status.textContent = `MIDI access failed: ${error.message}`;
+        }
+      });
+      document.getElementById('audio').addEventListener('click', async event => {
+        try {
+          audioContext = audioContext || new AudioContext({ sampleRate: 44100 });
+          await audioContext.resume();
+          if (!started) {
+            Module._betis_wasm_set_sample_rate(audioContext.sampleRate);
+            audioPointer = Module._malloc(1024 * 2 * Float32Array.BYTES_PER_ELEMENT);
+            audioNode = audioContext.createScriptProcessor(1024, 0, 2);
+            audioNode.onaudioprocess = audioEvent => {
+              Module._betis_wasm_render_audio(audioPointer, audioEvent.outputBuffer.length);
+              const samples = new Float32Array(Module.HEAPF32.buffer, audioPointer,
+                audioEvent.outputBuffer.length * 2);
+              const left = audioEvent.outputBuffer.getChannelData(0);
+              const right = audioEvent.outputBuffer.getChannelData(1);
+              for (let i = 0; i < left.length; i++) {
+                left[i] = samples[i * 2];
+                right[i] = samples[i * 2 + 1];
+              }
+            };
+            audioNode.connect(audioContext.destination);
+            started = true;
+          }
+          event.target.textContent = 'Audio enabled';
+          status.textContent = 'Audio engine running at the browser audio rate.';
+        } catch (error) {
+          status.textContent = `Audio could not start: ${error.message}`;
+        }
+      });
+      draw();
+    };
+  </script>
+  <script src="betis_mode.js"></script>
+</body>
+</html>

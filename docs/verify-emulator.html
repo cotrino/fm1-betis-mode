@@ -1,0 +1,93 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>FM1 Betis emulator acceptance tests</title>
+<pre id="results">Running...</pre>
+<script type="module">
+const results = [];
+function check(condition, message) {
+  if (!condition) throw Error(message);
+  results.push(message);
+}
+try {
+  const response = await fetch('simulator.wasm');
+  check(response.ok, 'Wasm download succeeds');
+  const {instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {});
+  const c = instance.exports;
+  c._initialize();
+  c.sim_boot(1);
+  const state = () => new Uint8Array(c.memory.buffer, c.sim_state(), 225);
+  const tap = key => { c.sim_control(0, key, 1); c.sim_control(0, key, 0); };
+  const render = blocks => {
+    let peak = 0, sum = 0;
+    for (let b = 0; b < blocks; b++) {
+      const samples = new Float32Array(c.memory.buffer, c.sim_render(), 256);
+      for (const sample of samples) {
+        if (!Number.isFinite(sample)) throw Error('Non-finite audio sample');
+        peak = Math.max(peak, Math.abs(sample)); sum += sample * sample;
+      }
+    }
+    return {peak, rms: Math.sqrt(sum / (blocks * 256))};
+  };
+  const midi = bytes => {
+    new Uint8Array(c.memory.buffer, c.sim_file(), bytes.length).set(bytes);
+    check(c.sim_midi(bytes.length) === 0, `MIDI accepted: ${bytes.join(',')}`);
+  };
+  check(state()[1] === 19, 'Boots into Betis dashboard');
+  check((c.sim_arp(0) & 256) !== 0, 'Official arpeggiator enabled by default');
+  check(state()[209 + 7] === 16, 'Crowd rhythm is a 16-step loop');
+  check(c.sim_open(0) === 0, 'Original overview remains accessible');
+  c.sim_control(0,8,1); c.sim_control(0,2,1); c.sim_release();
+  check(state()[1] === 19, 'HOME+FX returns to dashboard');
+  const cents = [0,-100,0,-100,0,0,-100,100,0,0,-100,0];
+  for (let track = 0; track < 8; track++)
+    for (let pitch = 0; pitch < 12; pitch++)
+      check(c.betis_tuning_cents(track, pitch) === cents[pitch], `Tuning ${track}:${pitch}`);
+  const pixels = new Uint16Array(c.memory.buffer, c.sim_pixels(), 57600);
+  check(pixels.some(pixel => pixel === 0x07e0), '240x240 RGB565 Betis green is rendered');
+  c.sim_control(2, 5, 127);
+  check(state()[18] + state()[19] * 256 === 180, 'Dashboard BPM capped at 180');
+  c.sim_control(2, 5, -127);
+  check(state()[18] + state()[19] * 256 === 60, 'Dashboard BPM floored at 60');
+  tap(3);
+  check(c.betis_tuning_cents(0, 1) === 0, 'SCL disables quantization');
+  tap(3);
+  check(c.betis_tuning_cents(0, 1) === -100, 'SCL restores quantization');
+  midi([0x90,60,100]); midi([0x90,64,100]);
+  const arpeggioNotes = new Set();
+  for (let block = 0; block < 900; block++) {
+    c.sim_render();
+    const note = c.sim_arp(0) & 255;
+    if (note !== 255) arpeggioNotes.add(note);
+  }
+  check(arpeggioNotes.has(60) && arpeggioNotes.has(64), 'Official arpeggiator advances both held notes');
+  midi([0x80,60,0]); midi([0x80,64,0]);
+  render(128);
+  check((c.sim_arp(0) & 255) === 255, 'Arpeggiator releases when all keys are lifted');
+  tap(10);
+  check((c.sim_arp(0) & 256) === 0, 'ARP toggles to live playing');
+  midi([0x90,60,100]); midi([0x90,61,100]);
+  const sounding = render(128);
+  check(sounding.rms > 0.00001 && sounding.peak <= 1.00001, 'FM output is audible, finite, and bounded');
+  midi([0x80,60,0]);
+  check(render(256).rms > 0.00001, 'Adjacent quantized MIDI notes release independently');
+  midi([0x80,61,0]);
+  render(4000);
+  check(render(256).rms < 0.0001, 'Released notes and effect tails decay to silence');
+  check(c.sim_export() === 0, 'Project export succeeds with tuning');
+  const saved = new Uint8Array(c.memory.buffer,c.sim_file(),4264).slice();
+  tap(3);
+  new Uint8Array(c.memory.buffer,c.sim_file(),4264).set(saved);
+  check(c.sim_import(4264) === 0, 'Project import succeeds');
+  check(c.betis_tuning_cents(0,1) === -100, 'Project round-trip preserves scale');
+  c.sim_panic();
+  tap(12);
+  check(render(768).rms > 0.00001, 'PLAY produces synthesized crowd percussion');
+  tap(12);
+  c.sim_panic();
+  document.getElementById('results').textContent = `PASS (${results.length} checks)\n` + results.join('\n');
+  globalThis.testResult = {passed:true,checks:results.length,sounding};
+} catch (error) {
+  document.getElementById('results').textContent = `FAIL: ${error.stack}\n` + results.join('\n');
+  globalThis.testResult = {passed:false,error:String(error),checks:results.length};
+}
+</script>
