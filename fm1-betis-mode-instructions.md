@@ -29,6 +29,16 @@ payload identity and corresponding-source completeness.
 - `app/screen.c`: green theme, boot branding, dashboard and controls, animated
   MIDI activity, and HOME+FX navigation. Uses the original band compositor,
   DMA ownership and existing input/transport handlers.
+- FX cycles studio / La Grada / 2022 Copa XI / club history. La Grada offers
+  four original percussion patterns (EDIT explicitly loads track 8), a manual
+  0-99 scoreboard and a four-second goal celebration. The XI is historical,
+  sourced from the 23 April 2022 final, not an assumed current lineup.
+- `web/betis-grada.html`: web-only local authorized-audio players for traditional
+  and centenary hymns. No protected music or lyrics are supplied; selected files
+  are neither uploaded nor persisted. Native patterns remain original percussion.
+- `web/betis-midi.js`: local MIDI-to-FM adaptation, tempo/sustain preservation,
+  eight-voice limit, type-0 MIDI export and real synth playback. Supplied
+  originals and derivatives in ignored `himnos/` are not redistributed.
 - `web/engine/Simulator.c`: starts the same dashboard in the Wasm platform.
 
 The native six-operator FM and other official engines are retained instead

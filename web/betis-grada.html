@@ -1,0 +1,183 @@
+<section id="betis-grada" aria-labelledby="betis-grada-title" style="margin:16px;padding:16px;border:2px solid #22c55e;background:#102619;color:white">
+<h2 id="betis-grada-title">&iexcl;Ahora s&iacute;: al l&iacute;o, verdiblancos!</h2>
+<p><strong>HOME+FX</strong> abre Betis. Pulsa <strong>FX</strong> para recorrer
+el estudio, la grada, el once de Copa y la memoria b&eacute;tica.</p>
+<ul>
+<li><strong>Grada:</strong> K1 elige ritmo; EDIT reemplaza los primeros 16 pasos de la pista 8
+(debe ser 808); PLAY lo toca. K2 y K3 corrigen los goles del Betis y rival (0&ndash;99).
+Subir K2 celebra el gol durante cuatro segundos. K4: 60&ndash;180 BPM.</li>
+<li><strong>Cuatro ritmos originales:</strong> Palmas del Heli&oacute;polis,
+Bombo de las 13 barras, Gol del Panda y Manque pierda. Son percusi&oacute;n sintetizada,
+no grabaciones de la afici&oacute;n ni versiones de los himnos.</li>
+<li><strong>Once de Copa:</strong> K1 recorre los once titulares de la final del
+23/04/2022. Los n&uacute;meros son posiciones de lista, no dorsales.
+No se presenta como la plantilla actual.</li>
+<li>El marcador es de juguete: no recibe resultados en directo y se reinicia al arrancar.
+Los patrones se guardan con el proyecto usando SAVE.</li>
+</ul>
+<h3>Tus himnos, en tu navegador</h3>
+<p><strong>Arreglador MIDI FM1:</strong> abre tus MIDI autorizados (tipo 0/1).
+Conserva las notas y el mapa de tempo; reorquesta a una pista FM de hasta ocho voces
+y percusi&oacute;n en canal 10. Reduce voces por antig&uuml;edad si hacen falta;
+no conserva los programas General MIDI, pitch bend ni automatizaciones.
+Puedes descargar el MIDI adaptado y tocarlo en el FM1 mediante un secuenciador externo.
+No es una grabaci&oacute;n ni una copia del arreglo instrumental original.</p>
+<label for="betis-midi-file">Tu himno o charanga MIDI (hasta 2 MiB)</label>
+<input id="betis-midi-file" type="file" accept=".mid,.midi,audio/midi">
+<button id="betis-midi-play" type="button" disabled>Tocar en el FM1 virtual</button>
+<button id="betis-midi-stop" type="button" disabled>Parar himno</button>
+<button id="betis-midi-save" type="button" disabled>Descargar arreglo .mid</button>
+<p id="betis-midi-status" role="status" aria-live="polite">Sin MIDI. Los archivos se procesan solo en tu navegador.</p>
+<p>Al tocar se detiene el secuenciador y se desactivan temporalmente el arpegiador y la
+escala de la pista 1; al parar se restauran. No edites ni guardes proyectos durante la
+reproducci&oacute;n del MIDI. Para el hardware: pista 1 FM, ARP apagado, afinaci&oacute;n
+12-TET y pista 8 de bater&iacute;a 808; env&iacute;a el arreglo por USB/TRS/BLE MIDI
+con tu secuenciador. El firmware no contiene estos himnos.</p>
+<p>El himno tradicional y el del centenario forman parte del repertorio del club.
+No distribuimos su letra, melod&iacute;a ni grabaciones. Puedes seleccionar tus archivos
+con autorizaci&oacute;n para escucharlos aqu&iacute;. No se suben, no se guardan y no se
+incluyen en el firmware. Estos reproductores son solo web y no se sincronizan con el secuenciador.
+Para usar muestras en el FM1, utiliza el editor de samples del workbench y respeta sus l&iacute;mites.</p>
+<div style="display:flex;gap:16px;flex-wrap:wrap">
+<div><label for="betis-traditional">Himno tradicional &mdash; tu audio autorizado</label><br>
+<input id="betis-traditional" type="file" accept="audio/*"><br>
+<audio id="betis-traditional-player" controls preload="none" aria-label="Tu himno tradicional"></audio></div>
+<div><label for="betis-centenary">Himno del centenario &mdash; tu audio autorizado</label><br>
+<input id="betis-centenary" type="file" accept="audio/*"><br>
+<audio id="betis-centenary-player" controls preload="none" aria-label="Tu himno del centenario"></audio></div>
+</div>
+<p id="betis-audio-status" role="status" aria-live="polite">Sin archivos. Solo audio local autorizado, hasta 32 MiB por archivo.</p>
+<details><summary>De d&oacute;nde sale este beticismo</summary>
+<p>Once y resultado hist&oacute;ricos:
+<a href="https://www.rtve.es/deportes/20220424/final-copa-rey-betis-gana-valencia-penatis-miranda/2337862.shtml">cr&oacute;nica y ficha de RTVE, final de Copa 2022</a>.
+Memoria del club:
+<a href="https://www.realbetisbalompie.es/noticias/actualidad/historia-el-ano-que-fuimos-campeones-24228">historia oficial: campeones de Liga en 1935</a>.
+Las descripciones con guasa de los jugadores son nuestras, no citas ni apodos oficiales.
+Esto es un proyecto de aficionados, sin afiliaci&oacute;n ni respaldo del club.</p>
+</details>
+</section>
+<script type="module">
+/* BETIS_MIDI */
+const midiFile = document.getElementById('betis-midi-file');
+const midiPlay = document.getElementById('betis-midi-play');
+const midiStop = document.getElementById('betis-midi-stop');
+const midiSave = document.getElementById('betis-midi-save');
+const midiStatus = document.getElementById('betis-midi-status');
+let song, songName, playing = false, timer, cursor = 0, started = 0, busy = false;
+async function stopMidi() {
+  clearTimeout(timer);
+  const wasPlaying = playing;
+  playing = false;
+  try {
+    if (wasPlaying) await globalThis.FM1BetisTransport.stop();
+  } finally {
+    midiFile.disabled = false; midiPlay.disabled = !song; midiStop.disabled = true;
+  }
+}
+async function tickMidi() {
+  if (!playing) return;
+  try {
+    const elapsed = performance.now() - started, data = [];
+    while (cursor < song.events.length && song.events[cursor].ms <= elapsed && data.length < 48)
+      data.push(...song.events[cursor++].data);
+    if (data.length) await globalThis.FM1BetisTransport.send(data);
+    if (!playing) return;
+    if (cursor === song.events.length) {
+      await stopMidi(); midiStatus.textContent = 'Fin del himno. Afinacion y ARP restaurados.';
+    } else {
+      midiStatus.textContent = 'Tocando ' + songName + ': ' + Math.floor(elapsed / 1000) + ' s / ' +
+        Math.ceil(song.duration / 1000) + ' s';
+      timer = setTimeout(tickMidi, Math.max(4, Math.min(10, song.events[cursor].ms - elapsed)));
+    }
+  } catch (error) {
+    try { await stopMidi(); } catch (stopError) {
+      midiStatus.textContent = error.message + ' / ' + stopError.message; return;
+    }
+    midiStatus.textContent = error.message;
+  }
+}
+midiFile.addEventListener('change', async () => {
+  try {
+    if (busy || playing) throw Error('Deten la reproduccion antes de cambiar de MIDI.');
+    song = undefined; midiPlay.disabled = midiSave.disabled = true;
+    const file = midiFile.files[0];
+    if (!file) return;
+    if (!file.size || file.size > 2 * 1024 * 1024) throw Error('Selecciona un MIDI no vacio de hasta 2 MiB.');
+    song = adaptMidi(await file.arrayBuffer()); songName = file.name;
+    midiPlay.disabled = midiSave.disabled = false;
+    midiStatus.textContent = file.name + ': ' + Math.ceil(song.duration / 1000) + ' s, ' +
+      song.report.noteOns + ' notas, ' + song.report.stolen + ' voces recortadas. Listo para tocar.';
+  } catch (error) { midiStatus.textContent = error.message; }
+});
+midiPlay.addEventListener('click', async () => {
+  if (!song || busy || playing) return;
+  busy = true; midiPlay.disabled = midiFile.disabled = true;
+  try {
+    await globalThis.FM1BetisTransport.start();
+    playing = true; cursor = 0; started = performance.now(); midiStop.disabled = false;
+    tickMidi();
+  } catch (error) {
+    midiStatus.textContent = error.message; midiPlay.disabled = false; midiFile.disabled = false;
+  } finally { busy = false; }
+});
+midiStop.addEventListener('click', async () => {
+  try { await stopMidi(); midiStatus.textContent = 'Parado. Afinacion y ARP restaurados.'; }
+  catch (error) { midiStatus.textContent = error.message; }
+});
+midiSave.addEventListener('click', () => {
+  if (!song) return;
+  const url = URL.createObjectURL(new Blob([encodeMidi(song)], {type:'audio/midi'}));
+  const link = document.createElement('a'); link.href = url;
+  link.download = songName.replace(/\.(mid|midi)$/i, '') + '-fm1.mid'; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden || !playing) return;
+  try { await stopMidi(); midiStatus.textContent = 'Parado al ocultar la pagina para evitar notas colgadas.'; }
+  catch (error) { midiStatus.textContent = error.message; }
+});
+const status = document.getElementById('betis-audio-status');
+const slots = ['betis-traditional', 'betis-centenary'].map(id => ({
+  input: document.getElementById(id),
+  player: document.getElementById(id + '-player'),
+  url: null
+}));
+function release(slot) {
+  slot.player.pause();
+  slot.player.removeAttribute('src');
+  slot.player.load();
+  if (slot.url) URL.revokeObjectURL(slot.url);
+  slot.url = null;
+}
+for (const slot of slots) {
+  slot.input.addEventListener('change', () => {
+    const file = slot.input.files[0];
+    if (!file) return;
+    release(slot);
+    if (!file.size || file.size > 32 * 1024 * 1024 ||
+        !(file.type.startsWith('audio/') ||
+          (!file.type && /\.(wav|mp3|ogg|m4a|flac|aac|opus)$/i.test(file.name)))) {
+      slot.input.value = '';
+      status.textContent = 'Archivo rechazado: selecciona audio no vacio de hasta 32 MiB.';
+      return;
+    }
+    slot.url = URL.createObjectURL(file);
+    slot.player.src = slot.url;
+    status.textContent = 'Audio local preparado: ' + file.name + '. Pulsa su reproductor para escucharlo.';
+  });
+  slot.player.addEventListener('play', () => {
+    for (const other of slots) if (other !== slot) other.player.pause();
+  });
+  slot.player.addEventListener('error', () => {
+    if (!slot.player.hasAttribute('src')) return;
+    status.textContent = 'No se puede reproducir este audio. Prueba un WAV PCM o un formato compatible con tu navegador.';
+    release(slot);
+  });
+}
+addEventListener('pagehide', event => {
+  for (const slot of slots) {
+    slot.player.pause();
+    if (!event.persisted) release(slot);
+  }
+});
+</script>

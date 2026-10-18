@@ -3,12 +3,55 @@
 <title>FM1 Betis emulator acceptance tests</title>
 <pre id="results">Running...</pre>
 <script type="module">
+/* BETIS_MIDI */
 const results = [];
 function check(condition, message) {
   if (!condition) throw Error(message);
   results.push(message);
 }
 try {
+  if (!globalThis.FM1BetisMidi) {
+    const script = document.createElement('script');
+    script.src = '../web/betis-midi.js';
+    await new Promise((resolve, reject) => {
+      script.onload = resolve; script.onerror = () => reject(Error('MIDI adapter unavailable'));
+      document.head.append(script);
+    });
+  }
+  const {adaptMidi, encodeMidi} = globalThis.FM1BetisMidi;
+  const smf = body => new Uint8Array([77,84,104,100,0,0,0,6,0,0,0,1,1,224,
+    77,84,114,107,0,0,(body.length >>> 8) & 255,body.length & 255,...body]).buffer;
+  const melody = adaptMidi(smf([0,0x90,60,100,0x83,0x60,0x80,60,0,0,0xff,0x2f,0]));
+  check(melody.duration === 500, 'MIDI PPQN and default tempo yield 500 ms quarter note');
+  const tempoChange = adaptMidi(smf([0,0xff,0x51,3,0x0f,0x42,0x40,
+    0,0x90,60,100,0x83,0x60,0x80,60,0,0,0xff,0x2f,0]));
+  check(tempoChange.duration === 1000, 'MIDI explicit tempo map is preserved');
+  const sustain = adaptMidi(smf([0,0xb0,64,127,0,0x90,60,100,0x81,0x70,0x80,60,0,
+    0x81,0x70,0xb0,64,0,0,0xff,0x2f,0]));
+  check(sustain.events.find(e => e.data[0] === 0x80).ms === 500, 'Sustain is rendered into note duration');
+  const repeated = adaptMidi(smf([0,0x90,60,100,0,0x91,60,90,0x81,0x70,0x80,60,0,
+    0x81,0x70,0x81,60,0,0,0xff,0x2f,0]));
+  check(repeated.events.filter(e => e.data[0] === 0x80).length === 1 &&
+    repeated.events.find(e => e.data[0] === 0x80).ms === 500,
+    'Merged channels retain overlapping note ownership');
+  const poly = [];
+  for (let note = 60; note < 70; note++) poly.push(0,0x90,note,100);
+  poly.push(0x83,0x60,0xff,0x2f,0);
+  const limited = adaptMidi(smf(poly));
+  let held = 0, maximum = 0;
+  for (const e of limited.events) {
+    if (e.data[0] === 0x90) held++;
+    if (e.data[0] === 0x80) held--;
+    maximum = Math.max(maximum, held);
+  }
+  check(maximum === 8 && held === 0 && limited.report.stolen === 2, 'Adaptation caps FM polyphony and releases stolen voices');
+  const midiRoundtrip = adaptMidi(encodeMidi(tempoChange).buffer);
+  check(midiRoundtrip.duration === tempoChange.duration, 'Adapted MIDI file round-trip retains timing');
+  for (const malformed of [new Uint8Array(), new Uint8Array([77,84,104,100]), new Uint8Array(smf([0,0x90,255]))]) {
+    let rejected = false;
+    try { adaptMidi(malformed.buffer); } catch { rejected = true; }
+    check(rejected, 'Malformed MIDI explicitly rejected');
+  }
   const response = await fetch('../docs/simulator.wasm');
   check(response.ok, 'Wasm download succeeds');
   const {instance} = await WebAssembly.instantiate(await response.arrayBuffer(), {});
@@ -84,6 +127,78 @@ try {
   check(render(768).rms > 0.00001, 'PLAY produces synthesized crowd percussion');
   tap(12);
   c.sim_panic();
+  const match = () => c.betis_match_state();
+  const project = () => {
+    check(c.sim_export() === 0, 'Project capture succeeds');
+    return new Uint8Array(c.memory.buffer, c.sim_file(), 4264).slice();
+  };
+  const beforeGrada = project();
+  const flashBeforeGrada = c.sim_flash_revision();
+  tap(2);
+  check((match() & 3) === 1, 'FX opens La Grada');
+  c.sim_control(2, 2, 1);
+  check(((match() >>> 6) & 3) === 1, 'K1 selects a crowd rhythm');
+  const afterSelect = project();
+  check(beforeGrada.every((byte, i) => byte === afterSelect[i]), 'Browsing rhythms does not overwrite the project');
+  c.sim_control(2, 3, 127);
+  c.sim_control(2, 4, 127);
+  check(((match() >>> 8) & 127) === 99 && ((match() >>> 15) & 127) === 99, 'Both score counters cap at 99');
+  c.sim_control(2, 3, -127);
+  c.sim_control(2, 4, -127);
+  check(((match() >>> 8) & 127) === 0 && ((match() >>> 15) & 127) === 0, 'Score corrections cannot go below zero');
+  const rhythmProjects = [];
+  for (let rhythm = 0; rhythm < 4; rhythm++) {
+    c.sim_control(2, 2, rhythm - ((match() >>> 6) & 3));
+    tap(6);
+    rhythmProjects.push(project());
+    check(state()[209 + 7] === 16, `Rhythm ${rhythm + 1} installs a 16-step loop`);
+    tap(12);
+    const sound = render(768);
+    check(sound.rms > 0.00001 && sound.peak <= 1.00001, `Rhythm ${rhythm + 1} produces bounded percussion`);
+    tap(12); c.sim_panic();
+  }
+  check(rhythmProjects.every((p, i) => rhythmProjects.every((q, j) =>
+    i === j || p.some((byte, k) => byte !== q[k]))), 'All four original crowd patterns are distinct');
+  tap(2);
+  check((match() & 3) === 2, 'FX opens historical Copa XI');
+  const knobs = () => new TextDecoder().decode(new Uint8Array(c.memory.buffer, c.sim_knobs(), 128));
+  c.sim_lcd_targets();
+  check(knobs().includes('JUGADOR'), 'Browser exposes the player selector, not a stale studio knob');
+  check(c.sim_lcd_mask() === 1, 'XI exposes only the player knob');
+  for (let player = 0; player < 11; player++) {
+    c.sim_control(2, 2, player - ((match() >>> 2) & 15));
+    check(((match() >>> 2) & 15) === player, `Historical starter ${player + 1} is reachable`);
+  }
+  c.sim_control(2, 2, 127);
+  check(((match() >>> 2) & 15) === 10, 'Player selection caps at eleven');
+  c.sim_control(2, 2, -127);
+  check(((match() >>> 2) & 15) === 0, 'Player selection floors at one');
+  tap(2);
+  check((match() & 3) === 3, 'FX opens Betis history');
+  check(c.sim_lcd_mask() === 0, 'History has no stale editable knobs');
+  tap(2);
+  check((match() & 3) === 0, 'FX returns to the musical studio');
+  c.sim_control(0,8,1); c.sim_control(0,2,1); c.sim_release();
+  check((match() & 3) === 0 && state()[1] === 19, 'HOME+FX always resets to the Betis studio');
+  check(c.sim_flash_revision() === flashBeforeGrada, 'Betis interaction performs no persistent flash writes');
+  const arpBeforeHymn = c.sim_arp(0);
+  const tuningBeforeHymn = c.betis_tuning_cents(0, 1);
+  check(c.betis_midi_prepare(1) === 0, 'Hymn playback preparation succeeds');
+  check(c.betis_tuning_cents(0, 1) === 0 && !(c.sim_arp(0) & 256), 'Hymns use original pitches without arpeggiation');
+  check(c.betis_midi_prepare(0) === 0 && c.betis_tuning_cents(0, 1) === tuningBeforeHymn &&
+    c.sim_arp(0) === arpBeforeHymn, 'Hymn stop restores prior tuning and arp');
+  tap(10);
+  check((c.sim_arp(0) & 256) !== 0, 'Arp can be enabled before hymn playback');
+  check(c.betis_midi_prepare(1) === 0 && !(c.sim_arp(0) & 256), 'Hymn temporarily disables an enabled arp');
+  check(c.betis_midi_prepare(0) === 0 && (c.sim_arp(0) & 256) !== 0, 'Hymn stop re-enables the original arp state');
+  check(c.sim_select(7, 0) === 0, 'Test can replace track 8 with FM');
+  c.sim_open(19);
+  c.sim_control(0,8,1); c.sim_control(0,2,1); c.sim_release(); tap(2);
+  const changedSource = project();
+  tap(6);
+  const refusedRhythm = project();
+  check(changedSource.every((byte, i) => byte === refusedRhythm[i]),
+    'Crowd rhythm refuses non-808 track without changing the project');
   document.getElementById('results').textContent = `PASS (${results.length} checks)\n` + results.join('\n');
   globalThis.testResult = {passed:true,checks:results.length,sounding};
 } catch (error) {

@@ -27,11 +27,45 @@ $html = $html.Replace($playable, '[0,2,3,4,5,10,15,17,19].includes(state[1])')
 $shortcut = '<div class="edit-shortcuts"><button data-sim data-sim-page="15"'
 if (!$html.Contains($shortcut)) { throw 'Upstream browser toolbar contract changed' }
 $html = $html.Replace($shortcut, '<div class="edit-shortcuts"><button data-sim data-sim-page="19" disabled>Betis Mode</button><button data-sim data-sim-page="15"')
+$midiCase = "          case 'midi':"
+if (!$html.Contains($midiCase)) { throw 'Upstream MIDI command contract changed' }
+$html = $html.Replace($midiCase, "          case 'betis-midi': result=c.betis_midi_prepare(message.enabled?1:0); break;`n$midiCase")
+$midiBridge = @'
+  let betisMidiEpoch = 0;
+  globalThis.FM1BetisTransport = {
+    async start() {
+      if (!ready) throw Error('El sintetizador todavia no esta listo.');
+      await start(true);
+      if (!audioOn) throw Error('No se ha podido activar el sonido.');
+      await request('panic');
+      await request('betis-midi', {enabled:true});
+      betisMidiEpoch++;
+    },
+    async send(data) {
+      if (!audioOn || !ready) throw Error('El sintetizador ha perdido el audio.');
+      const epoch = betisMidiEpoch;
+      for (let at=0; at<data.length; at+=3) {
+        if (epoch !== betisMidiEpoch) return;
+        await request('midi', {data:new Uint8Array(data.slice(at,at+3))});
+      }
+    },
+    async stop() {
+      betisMidiEpoch++;
+      if (!ready) throw Error('El sintetizador no esta disponible para detenerlo.');
+      await request('panic');
+      await request('betis-midi', {enabled:false});
+    }
+  };
+'@
+$bridgeAnchor = "  function control(kind,index,value){"
+if (!$html.Contains($bridgeAnchor)) { throw 'Upstream simulator control contract changed' }
+$html = $html.Replace($bridgeAnchor, "$midiBridge`n$bridgeAnchor")
 $banner = @'
 <aside style="margin:16px;padding:16px;border:2px solid #22c55e;background:#102619;color:white">
 <strong>FM1 BETIS MODE - unofficial community firmware</strong>
 <p>Real FM1 Open engine and 240x240 TFT emulator. HOME+FX: Betis dashboard.
-SCL on dashboard: scale on/off. Knobs: FM feedback, reverb send, delay send, BPM.</p>
+SCL on dashboard: scale on/off. FX: studio / crowd / 2022 cup XI / club history.
+Crowd: K1 rhythm, EDIT loads track 8, K2/K3 goals, K4 BPM.</p>
 <p><a href="FM1_BETIS_MODE.fwsc">Download firmware</a> |
 <a href="source.zip">Matching source + SDK</a> |
 <a href="firmware-report.json">Build verification</a> |
@@ -41,11 +75,15 @@ Back up projects and samples before updating. No automatic device flashing.</p>
 </aside>
 '@
 if (!$html.Contains('<main>')) { throw 'Upstream browser main contract changed' }
-$html = $html.Replace('<main>', "<main>`n$banner")
+$grada = [IO.File]::ReadAllText((Join-Path $root 'web\betis-grada.html'))
+$midiScript = [IO.File]::ReadAllText((Join-Path $root 'web\betis-midi.js'))
+$grada = $grada.Replace('/* BETIS_MIDI */', $midiScript)
+$html = $html.Replace('<main>', "<main>`n$banner`n$grada")
 $html = [regex]::Replace($html, '<title>[^<]*</title>', '<title>FM1 Betis Mode Workbench</title>')
 [IO.File]::WriteAllText((Join-Path $out 'index.html'), $html, $utf8)
 [IO.File]::WriteAllText((Join-Path $out '.nojekyll'), '', $utf8)
 $acceptance = [IO.File]::ReadAllText((Join-Path $root 'tests\verify-emulator.html')).Replace('../docs/simulator.wasm', 'simulator.wasm')
+$acceptance = $acceptance.Replace('/* BETIS_MIDI */', $midiScript)
 [IO.File]::WriteAllText((Join-Path $out 'verify-emulator.html'), $acceptance, $utf8)
 $webReportFile = Join-Path $out 'web-package-report.json'
 $webReport = Get-Content $webReportFile -Raw | ConvertFrom-Json

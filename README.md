@@ -42,6 +42,60 @@ Alt tuning is left unchanged. The default project enables track 1's arpeggiator
 and includes an original synthesized 16-step 808 kick/clap/hat crowd rhythm.
 Loading a saved project restores its own tuning, sounds, patterns and arp.
 
+### Mas grada: guasa, goles y memoria betica
+
+From the Betis studio, **FX** cycles through four shared hardware/browser views:
+studio, **La Grada**, **Once de Copa**, and **Memoria Betica**. HOME+FX returns to
+the studio; HOME still opens the original overview.
+
+- **La Grada:** K1 selects one of four original synthesized percussion patterns:
+  Palmas del Heliopolis, Bombo de las 13 barras, Gol del Panda, Manque pierda.
+  **EDIT explicitly replaces the first 16 steps of track 8**, which must still
+  be an 808 instrument. Merely browsing never changes the project or source.
+  Hidden steps beyond 16 are retained. PLAY starts/stops the normal sequencer;
+  SAVE persists the pattern using the official project flow.
+- **Matchday:** K2/K3 adjust Betis/opponent scores from 0 to 99; increasing the
+  Betis score triggers a four-second goal message. Corrections are allowed.
+  This is a manual toy scoreboard, not a live score service; it resets at boot.
+  K4 retains the 60-180 BPM control. Thirteen green/white bars crown the display.
+- **Once de Copa:** K1 browses the eleven starters in the **23 April 2022 Copa
+  final**, not an unverified current lineup. List numbers are not shirt numbers.
+  Bravo; Bellerin, Pezzella, Bartra, Alex Moreno; Guido, William Carvalho;
+  Canales, Fekir, Juanmi; Borja Iglesias. Player descriptions are original
+  fan-written flavor, not quotations or claims of official nicknames.
+- **Memory:** 1907 roots, the 1935 Liga, Cups in 1977/2005/2022, thirteen bars,
+  Palmerin, and Manque pierda.
+
+The web-only hymn corner has separate **traditional / centenary** local-audio
+players. Supply your own authorized files (up to 32 MiB each). Files are not
+uploaded, stored, bundled, synchronized to transport, or copied into firmware.
+No protected hymn lyrics, melodies, or recordings are distributed. The four
+crowd patterns are original percussion, not versions of those hymns. For
+device samples use the existing sample editor and its supported limits.
+
+The **MIDI arranger/player** also accepts user-supplied type-0/1 PPQN MIDI
+files (up to 2 MiB, two hours, 256 tracks). It flattens the tempo map to
+millisecond timing, merges melodic channels to channel 1 (eight FM voices)
+and retains percussion on channel 10. Sustain becomes note duration;
+overlapping pitches keep independent ownership. Voice stealing is reported.
+Original GM instruments, pitch bends, and other automation are deliberately
+not retained: this is a new monotimbral FM arrangement, not an exact orchestral
+render. The exported type-0 MIDI can be played into the hardware using an
+external MIDI sequencer with track 1 FM/12-TET/ARP off and track 8 808.
+
+Web playback uses the real AudioWorklet synth. It stops transport, temporarily
+disables track 1's scale/ARP, and restores both at stop/end. Stop it before
+editing or saving a project. Hiding the tab stops playback to prevent
+background timer drift and stuck notes. Supplied originals and exported
+arrangements remain local under ignored `himnos/`; they are not in Git, the
+public source ZIP, firmware, or deployed web page.
+
+References checked for this implementation:
+[RTVE's 2022 final match sheet](https://www.rtve.es/deportes/20220424/final-copa-rey-betis-gana-valencia-penatis-miranda/2337862.shtml)
+(1-1, Betis wins 5-4 on penalties) and the
+[club's account of the 1935 championship](https://www.realbetisbalompie.es/noticias/actualidad/historia-el-ano-que-fuimos-campeones-24228).
+No current squad is inferred from speculative search results.
+
 ## Preserved official features
 
 The six-operator FM, 303, 808, PSG, pluck and sampler engines, eight tracks,

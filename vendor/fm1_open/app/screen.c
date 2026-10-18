@@ -1368,6 +1368,16 @@ static void betis_bitmap(unsigned x, unsigned y, const uint8_t *bits, uint16_t c
             if (bits[row * 3 + col / 8] & (0x80U >> (col & 7U)))
                 paint_fill(x + col * 2, y + row * 2, 2, 2, color);
 }
+static unsigned betis_view, betis_player, betis_rhythm, betis_home, betis_away;
+static uint32_t betis_goal_until;
+#ifdef __wasm__
+__attribute__((export_name("betis_match_state")))
+unsigned betis_match_state(void)
+{
+    return betis_view | (betis_player << 2) | (betis_rhythm << 6) |
+        (betis_home << 8) | (betis_away << 15);
+}
+#endif
 static void betis_draw(void)
 {
     uint8_t sends[2], patch[156];
@@ -1379,10 +1389,63 @@ static void betis_draw(void)
         ((uint32_t)sends[1] << 7) | (track << 11) | (jump << 14) |
         (scale_on << 18) | ((uint32_t)frame_views[track].tempo << 19);
     sig ^= (uint32_t)frame_views[track].type * 2654435761U;
+    unsigned goal = betis_goal_until && (int32_t)(betis_goal_until - frame_time) > 0;
+    sig ^= betis_view * 2246822519U ^ betis_player * 3266489917U ^
+        betis_rhythm * 668265263U ^ betis_home * 374761393U ^
+        betis_away * 1274126177U ^ goal;
     if (cache->middle_cache == sig) return;
     cache->middle_cache = sig;
     /* Use the normal damage/band compositor; never write behind its DMA. */
     paint_fill(0, 30, 240, 210, BACK);
+    memset(cache->foot_cache, 0xff, sizeof cache->foot_cache);
+    for (unsigned i = 0; i < 13; ++i)
+        paint_fill(i * 240 / 13, 30, (i + 1) * 240 / 13 - i * 240 / 13, 4,
+            i & 1U ? TEXT : ACCENT);
+    if (betis_view) {
+        static const char *const titles[] = {"", "LA GRADA", "ONCE DE COPA", "MEMORIA BETICA"};
+        text(8, 40, titles[betis_view], 2, ACCENT, BACK);
+        if (betis_view == 1) {
+            text(8, 68, goal ? "GOOOOL DEL BETIS!" : "VIVA EL BETIS!", 2, TEXT, BACK);
+            text(8, 96, "BETIS", 2, ACCENT, BACK);
+            number(88, 96, betis_home, 2, 2, TEXT, BACK);
+            text(130, 96, "-", 2, TEXT, BACK);
+            number(158, 96, betis_away, 2, 2, TEXT, BACK);
+            text(8, 119, "RIVAL", 1, DIM, BACK);
+            text(8, 140, betis_rhythm_names[betis_rhythm], 1, TEXT, BACK);
+            text(8, 155, "RITMOS ORIGINALES / NO HIMNOS", 1, DIM, BACK);
+            text(8, 170, "EDIT CARGA T8 / PLAY SUENA", 1, DIM, BACK);
+            int values[4] = {betis_rhythm + 1, betis_home, betis_away, frame_views[track].tempo};
+            static const char *const labels[] = {"RITMO", "GOL BETIS", "GOL RIVAL", "BPM"};
+            for (unsigned i = 0; i < 4; ++i) {
+                char value[12]; decimal(value, values[i], 1);
+                knob(i, labels[i], value, i == 2 ? TEXT : ACCENT);
+            }
+        } else if (betis_view == 2) {
+            const struct betis_player *player = &betis_eleven[betis_player];
+            text(8, 66, "FINAL 23/04/2022 / 4-2-3-1", 1, DIM, BACK);
+            text(8, 85, "BETIS 1-1 VALENCIA (5-4 PEN)", 1, TEXT, BACK);
+            number(8, 111, betis_player + 1, 2, 2, ACCENT, BACK);
+            text(8, 138, player->name, 2, TEXT, BACK);
+            text(8, 161, player->role, 1, ACCENT, BACK);
+            text(8, 177, player->nickname, 1, TEXT, BACK);
+            char value[12]; decimal(value, betis_player + 1, 1);
+            knob(0, "JUGADOR", value, ACCENT);
+            text(68, 200, "NO ES DORSAL", 1, DIM, BACK);
+            text(68, 214, "DT: PELLEGRINI", 1, DIM, BACK);
+        } else {
+            static const char *const history[] = {
+                "1907 / RAICES VERDIBLANCAS", "1935 / CAMPEONES DE LIGA",
+                "1977 / PRIMERA COPA", "2005 / SEGUNDA COPA",
+                "2022 / LA COPA DE LA CARTUJA", "13 BARRAS / VERDE Y BLANCO",
+                "PALMERIN / NUESTRA MASCOTA", "MANQUE PIERDA / SIEMPRE BETIS"
+            };
+            for (unsigned i = 0; i < 8; ++i)
+                text(8, 72 + i * 17, history[i], 1, i & 1U ? TEXT : ACCENT, BACK);
+            text(8, 213, "EL MARCADOR NO MANDA AQUI", 1, TEXT, BACK);
+        }
+        text(8, 231, "FX PAGINA / HOME SALE", 1, DIM, BACK);
+        return;
+    }
     text(24, 38, "MANQUE PIERDA", 2, ACCENT, BACK);
     betis_bitmap(24, 64, betis_shield, TEXT);
     betis_bitmap(166, 78 - jump, betis_palmerin, ACCENT);
@@ -1400,7 +1463,7 @@ static void betis_draw(void)
         char value[12]; decimal(value, values[i], 1);
         knob(i, labels[i], value, i & 1U ? TEXT : ACCENT);
     }
-    text(8, 231, "HOME+FX BETIS  SCL SCALE", 1, DIM, BACK);
+    text(8, 231, "FX GRADA / SCL ESCALA", 1, DIM, BACK);
 }
 static void draw_page_body(const struct fm1_ble_status *ble)
 {
@@ -1766,6 +1829,8 @@ static void toggle_step(unsigned step)
 }
 void groove_screen_init(void)
 {
+    betis_view = betis_player = betis_rhythm = betis_home = betis_away = 0;
+    betis_goal_until = 0;
     track = cursor = drum = writing = page = fm_group = op = 0;
     page = BETIS;
     music_page = subpage_return = project_return = rec_before_press = OVERVIEW;
@@ -1935,6 +2000,19 @@ static int apply_controls(const struct fm1_controls *controls, uint32_t now,
     if ((controls->buttons & (BUTTON(HOME) | BUTTON(FX))) == (BUTTON(HOME) | BUTTON(FX)) &&
         (pressed & (BUTTON(HOME) | BUTTON(FX)))) {
         page = BETIS; glo_down = glo_used = 0;
+        betis_view = 0;
+        goto controls_done;
+    }
+    if (page == BETIS && (pressed & BUTTON(FX))) {
+        betis_view = (betis_view + 1) % 4;
+        cache->middle_cache = ~0U;
+        goto controls_done;
+    }
+    if (page == BETIS && betis_view == 1 && (pressed & BUTTON(EDIT))) {
+        notice = betis_rhythm_apply(betis_rhythm)
+            ? "T8 MUST BE 808 / NO CHANGE" : "RHYTHM LOADED T8 / PLAY";
+        notice_until = now + 2500U;
+        edit_down = edit_long = 0;
         goto controls_done;
     }
     if (page == BETIS && (pressed & BUTTON(SCL))) {
@@ -2305,14 +2383,24 @@ static int apply_controls(const struct fm1_controls *controls, uint32_t now,
                     }
                 }
                 if (page == BETIS) {
-                    if (groove_source_type(track) == GROOVE_DX7)
-                        groove_fm_edit(track, 135, controls->encoders[2]);
-                    groove_sends_edit(track, 0, controls->encoders[3]);
-                    groove_sends_edit(track, 1, controls->encoders[4]);
+                    if (betis_view == 1) {
+                        betis_rhythm = (unsigned)clamp((int)betis_rhythm + controls->encoders[2], 0, BETIS_RHYTHMS - 1);
+                        unsigned previous = betis_home;
+                        betis_home = (unsigned)clamp((int)betis_home + controls->encoders[3], 0, 99);
+                        betis_away = (unsigned)clamp((int)betis_away + controls->encoders[4], 0, 99);
+                        if (betis_home > previous) betis_goal_until = now + 4000U;
+                    } else if (betis_view == 2) {
+                        betis_player = (unsigned)clamp((int)betis_player + controls->encoders[2], 0, 10);
+                    } else if (!betis_view) {
+                        if (groove_source_type(track) == GROOVE_DX7)
+                            groove_fm_edit(track, 135, controls->encoders[2]);
+                        groove_sends_edit(track, 0, controls->encoders[3]);
+                        groove_sends_edit(track, 1, controls->encoders[4]);
+                    }
                     struct groove_view tempo_view = {0};
                     groove_get_view(track, 0, &tempo_view);
                     int tempo = clamp((int)tempo_view.tempo + controls->encoders[5], 60, 180);
-                    if (controls->encoders[5])
+                    if (betis_view < 2 && controls->encoders[5])
                         groove_tempo_edit(tempo - (int)tempo_view.tempo);
                 } else if (page == ARP_EDIT) {
                     arp_page = (unsigned)clamp((int)arp_page + controls->encoders[1], 0, 1);
@@ -2739,7 +2827,8 @@ unsigned groove_screen_web_context(void)
     unsigned context[] = {page, track, groove_source_type(track), op, fm_group,
         tone_part(), tone_pages[track][tone_slot()], effects_page,
         ble_view, advanced_edit, glo_down && glo_used,
-        (page == STEP_EDIT || (page == STEPS && seq_page)) ? cursor : 0, seq_page, arp_page};
+        (page == STEP_EDIT || (page == STEPS && seq_page)) ? cursor : 0, seq_page, arp_page,
+        page == BETIS ? betis_view : 0};
     return signature(2166136261U, context, sizeof context);
 }
 unsigned groove_screen_web_mask(void)
@@ -2755,7 +2844,9 @@ unsigned groove_screen_web_mask(void)
     }
     if ((page == OVERVIEW || (page == STEPS && !seq_page)) && groove_clock_mode()) mask &= ~8U;
     if (page == BETIS) {
-        if (groove_source_type(track) != GROOVE_DX7) mask &= ~1U;
+        if (betis_view == 2) return 1U;
+        if (betis_view == 3) return 0;
+        if (!betis_view && groove_source_type(track) != GROOVE_DX7) mask &= ~1U;
         if (groove_clock_mode()) mask &= ~8U;
     }
     if (page == STEPS && seq_page == 4 && groove_clock_mode()) mask &= ~2U;

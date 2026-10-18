@@ -39,7 +39,11 @@ foreach ($pair in @(@('FM1_PACKAGE','FM1_BETIS_MODE.fwsc'),@('FM1_SIMULATOR','si
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead((Join-Path $out 'source.zip'))
 try {
-    foreach ($relative in @('Build.ps1','tools/Verify.ps1','vendor/fm1_open/app/screen.c',
+    if (@($zip.Entries | Where-Object { $_.FullName.StartsWith('himnos/') }).Count) {
+        throw 'Private user music must not enter the public corresponding-source archive'
+    }
+    foreach ($relative in @('Build.ps1','tools/Verify.ps1','web/betis-grada.html','web/betis-midi.js',
+        'vendor/fm1_open/app/screen.c',
         'vendor/fm1_open/app/betis.c','vendor/fm1_open/app/betis.h',
         'vendor/fm1_open/web/engine/Simulator.c','vendor/fm1_open/sdk/manifest.json',
         'vendor/fm1_open/sdk/Build.ps1','LICENSE.md','THIRD_PARTY.md')) {

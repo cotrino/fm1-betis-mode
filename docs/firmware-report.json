@@ -1,8 +1,8 @@
 {
     "passed":  true,
-    "elf_sha256":  "b6e797ced64354b179a492f26f68e7bf74c1ad932b0b641082370237f6843162",
-    "allocated_image_bytes":  442448,
-    "app_image_bytes":  442396,
+    "elf_sha256":  "ca3ff3d0ae27d098b9c5e4a5ab71c1a9eebfccaa845acfa556fc4a9453b2789b",
+    "allocated_image_bytes":  445072,
+    "app_image_bytes":  445020,
     "startup_entry_verified":  true,
     "startup_entry":  33554720,
     "instrument_ready":  true,
@@ -11,7 +11,7 @@
                      {
                          "name":  ".text",
                          "address":  33554720,
-                         "bytes":  355104,
+                         "bytes":  357728,
                          "nobits":  false
                      },
                      {
@@ -23,7 +23,7 @@
                      {
                          "name":  ".ram0_bss",
                          "address":  29447388,
-                         "bytes":  137164,
+                         "bytes":  137196,
                          "nobits":  true
                      },
                      {
@@ -40,14 +40,14 @@
                      }
                  ],
     "heap_symbols":  {
-                         "HEAP_BEGIN":  29584576,
+                         "HEAP_BEGIN":  29584608,
                          "HEAP_END":  29883692,
                          "RAM_HEAP_BEGIN":  0,
                          "RAM_HEAP_END":  0,
-                         "_HEAP_BEGIN":  29584576,
+                         "_HEAP_BEGIN":  29584608,
                          "_HEAP_END":  29883692
                      },
-    "runtime_heap_bytes":  299116,
+    "runtime_heap_bytes":  299084,
     "minimum_runtime_heap_bytes":  49152,
     "classic_acl_tx_bytes":  1024,
     "classic_acl_rx_bytes":  4096,
